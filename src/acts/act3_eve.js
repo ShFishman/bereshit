@@ -7,6 +7,7 @@ import { clock, wait, ease, lerp, clamp, isMobile } from '../core/utils.js';
 import { POSES } from '../gfx/figures.js';
 import { DustCloud, sampleSurface } from '../gfx/particles.js';
 import { faceTowards } from './act2_eden.js';
+import { runExchange } from './dialogue.js';
 
 const ADAM = new THREE.Vector3(1.2, 0, 11.5);
 const EVE = new THREE.Vector3(-1.5, 0, 10.2);
@@ -128,6 +129,36 @@ export async function runEve(ctx) {
     await ui.speak('אָדָם', E.waking.adamFirstWords, null, { dwell: 5200, fadeOut: true });
   }
   await ui.narrateAll(E.waking.narration);
+
+  /* ═══════════ the first conversation ═══════════ */
+  // The only interactive scene in the piece with nothing at stake. It is here
+  // so that the player has something to lose later.
+  if (SCRIPT.exchanges?.firstWords) {
+    faceTowards(stage.eve.object, ADAM.x, ADAM.z);
+    faceTowards(stage.adam.object, EVE.x, EVE.z);
+    const mid = [(ADAM.x + EVE.x) / 2, 1.3, (ADAM.z + EVE.z) / 2];
+
+    const warmth = await runExchange(ctx, SCRIPT.exchanges.firstWords, {
+      speaker: 'חַוָּה', player: 'אָדָם',
+      dwellVoice: 4600, dwellReply: 3800, dwellRetort: 4200,
+      onNode: (_n, i, t) => {
+        // they drift fractionally closer as they talk
+        engine.rig.moveTo(
+          [lerp(3.2, 2.1, t), lerp(2.0, 1.85, t), lerp(ADAM.z + 4.2, ADAM.z + 3.0, t)],
+          mid, 6, ease.inOutCubic);
+        stage.eve.poseTo(i % 2 ? POSES.wonder : POSES.rest, 1.6);
+      },
+      onReply: (r) => {
+        if ((r?.sway ?? 0) >= 2) {
+          stage.adam.poseTo(POSES.wonder, 1.4, ease.outCubic);
+          score.cue('chime');
+        }
+      },
+    });
+    state.warmth = warmth;
+    stage.adam.poseTo(POSES.rest, 1.8);
+    stage.eve.poseTo(POSES.rest, 1.8);
+  }
 
   /* ═══════════ and they were both naked, and were not ashamed ═══════════ */
   stage.adam.poseTo(POSES.rest, 2);

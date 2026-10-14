@@ -73,7 +73,17 @@ export const SCRIPT = Object.freeze({
           { he: "יום. לילה. הדברים הראשונים שנקראו בשם.", en: "Day. Night. The first things to be called by a name.", dwell: 3600 },
           { he: "שים לב: הערב בא קודם.", en: "Notice: the evening comes first.", dwell: 3800 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם אֶחָד", en: "And there was evening and there was morning, one day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם אֶחָד", en: "And there was evening and there was morning, one day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:ג׳",
+            he: "וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי־אוֹר׃",
+            en: "And God said, Let there be light. And there was light."
+          }
+        ],
+        briefNarration: [
+          { he: "אין שמש. אין עדיין מה שיאיר. ובכל זאת — אור.", en: "There is no sun. Nothing yet to shine. And still — light.", dwell: 3400 }
+        ]
       },
       {
         n: 2,
@@ -103,7 +113,17 @@ export const SCRIPT = Object.freeze({
           { he: "אולי כי הפרדה אינה דבר שלם. אולי כי המלאכה לא נגמרה.", en: "Perhaps because a separation is not a whole thing. Perhaps because the work is not finished.", dwell: 4600 },
           { he: "שמים: תקרה דקה מעל ים שלם.", en: "Sky: a thin roof over a whole sea.", dwell: 3600 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם שֵׁנִי", en: "And there was evening and there was morning, a second day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם שֵׁנִי", en: "And there was evening and there was morning, a second day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:ו׳",
+            he: "יְהִי רָקִיעַ בְּתוֹךְ הַמָּיִם וִיהִי מַבְדִּיל בֵּין מַיִם לָמָיִם׃",
+            en: "Let there be a firmament in the midst of the waters, and let it divide the waters from the waters."
+          }
+        ],
+        briefNarration: [
+          { he: "זה היום היחיד שלא נאמר בו 'כי טוב'. הפרדה אינה דבר שלם.", en: "This is the only day on which 'it was good' is not said. A separation is not a whole thing.", dwell: 3800 }
+        ]
       },
       {
         n: 3,
@@ -139,7 +159,17 @@ export const SCRIPT = Object.freeze({
           { he: "פעמיים היום נאמר 'כי טוב'. כאילו להשלים את מה שחסר אתמול.", en: "Twice today 'it was good' is said. As if to make up for yesterday.", dwell: 4000 },
           { he: "ובין העצים, בלי שאיש ישים לב, שני עצים שעוד יהיה להם שם.", en: "And among the trees, with no one yet to notice, two trees that will one day have names.", dwell: 5000 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם שְׁלִישִׁי", en: "And there was evening and there was morning, a third day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם שְׁלִישִׁי", en: "And there was evening and there was morning, a third day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:י״א",
+            he: "תַּדְשֵׁא הָאָרֶץ דֶּשֶׁא עֵשֶׂב מַזְרִיעַ זֶרַע עֵץ פְּרִי עֹשֶׂה פְּרִי לְמִינוֹ אֲשֶׁר זַרְעוֹ־בוֹ עַל־הָאָרֶץ׃",
+            en: "Let the earth put forth grass, herb yielding seed, fruit tree bearing fruit after its kind, whose seed is in itself, upon the earth."
+          }
+        ],
+        briefNarration: [
+          { he: "ובין העצים, בלי שאיש ישים לב, שני עצים שעוד יהיה להם שם.", en: "And among the trees, with no one yet to notice, two trees that will one day have names.", dwell: 3800 }
+        ]
       },
       {
         n: 4,
@@ -174,7 +204,17 @@ export const SCRIPT = Object.freeze({
           { he: "מעכשיו יש זמן. אפשר לספור. אפשר לחכות.", en: "From now on there is time. One can count. One can wait.", dwell: 4000 },
           { he: "אפשר, גם, להתגעגע.", en: "One can, also, long for something.", dwell: 4400 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם רְבִיעִי", en: "And there was evening and there was morning, a fourth day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם רְבִיעִי", en: "And there was evening and there was morning, a fourth day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:י״ד",
+            he: "יְהִי מְאֹרֹת בִּרְקִיעַ הַשָּׁמַיִם לְהַבְדִּיל בֵּין הַיּוֹם וּבֵין הַלָּיְלָה וְהָיוּ לְאֹתֹת וּלְמוֹעֲדִים וּלְיָמִים וְשָׁנִים׃",
+            en: "Let there be lights in the firmament of the heavens to divide the day from the night; and let them be for signs, and for seasons, and for days and years."
+          }
+        ],
+        briefNarration: [
+          { he: "מעכשיו יש זמן. אפשר לספור. אפשר לחכות. אפשר, גם, להתגעגע.", en: "From now on there is time. One can count. One can wait. One can, also, long for something.", dwell: 3800 }
+        ]
       },
       {
         n: 5,
@@ -204,7 +244,17 @@ export const SCRIPT = Object.freeze({
           { he: "ברכה ראשונה. פרו ורבו. כלומר: אתם לא לבד, ולא תהיו.", en: "The first blessing. Be fruitful and multiply. Which is to say: you are not alone, and you will not be.", dwell: 4800 },
           { he: "כל ציפור ממריאה ליד ציפור אחרת.", en: "Every bird lifts off beside another bird.", dwell: 4200 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם חֲמִישִׁי", en: "And there was evening and there was morning, a fifth day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם חֲמִישִׁי", en: "And there was evening and there was morning, a fifth day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:כ״ב",
+            he: "וַיְבָרֶךְ אֹתָם אֱלֹהִים לֵאמֹר פְּרוּ וּרְבוּ׃",
+            en: "And God blessed them, saying, Be fruitful and multiply."
+          }
+        ],
+        briefNarration: [
+          { he: "ברכה ראשונה: פרו ורבו. כלומר — אתם לא לבד, ולא תהיו.", en: "The first blessing: be fruitful and multiply. Which is to say — you are not alone, and you will not be.", dwell: 3800 }
+        ]
       },
       {
         n: 6,
@@ -239,7 +289,18 @@ export const SCRIPT = Object.freeze({
           { he: "זכר ונקבה ברא אותם. כך כתוב כאן. זכור את זה. בפרק הבא זה יקרה אחרת.", en: "Male and female he created them. So it is written here. Remember that. In the next chapter it happens differently.", dwell: 5000 },
           { he: "טוב מאוד. לא רק טוב. אבל 'מאוד' היא מילה שאפשר ליפול ממנה.", en: "Very good. Not just good. But 'very' is a word a thing can fall from.", dwell: 5000 }
         ],
-        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם הַשִּׁשִּׁי", en: "And there was evening and there was morning, the sixth day." }
+        afterword: { he: "וַיְהִי־עֶרֶב וַיְהִי־בֹקֶר יוֹם הַשִּׁשִּׁי", en: "And there was evening and there was morning, the sixth day." },
+        briefVerses: [
+          {
+            ref: "בראשית א׳:כ״ז",
+            he: "וַיִּבְרָא אֱלֹהִים אֶת־הָאָדָם בְּצַלְמוֹ בְּצֶלֶם אֱלֹהִים בָּרָא אֹתוֹ זָכָר וּנְקֵבָה בָּרָא אֹתָם׃",
+            en: "And God created the human in his image; in the image of God he created him; male and female he created them."
+          }
+        ],
+        briefNarration: [
+          { he: "זכר ונקבה ברא אותם. זכור את זה. בפרק הבא זה יקרה אחרת.", en: "Male and female he created them. Remember that. In the next chapter it happens differently.", dwell: 3800 },
+          { he: "טוב מאוד. אבל 'מאוד' היא מילה שאפשר ליפול ממנה.", en: "Very good. But 'very' is a word a thing can fall from.", dwell: 3600 }
+        ]
       },
       {
         n: 7,
@@ -269,7 +330,17 @@ export const SCRIPT = Object.freeze({
           { he: "זה הדבר הראשון שמתקדש. לא מקום. לא חפץ. זמן.", en: "This is the first thing made holy. Not a place. Not an object. Time.", dwell: 4600 },
           { he: "העולם שלם. כל מה שיקרה עכשיו — יקרה בתוכו.", en: "The world is complete. Whatever happens now, happens inside it.", dwell: 5000 }
         ],
-        afterword: { he: "לא נאמר בו ערב. לא נאמר בו בוקר.", en: "No evening is said of it. No morning." }
+        afterword: { he: "לא נאמר בו ערב. לא נאמר בו בוקר.", en: "No evening is said of it. No morning." },
+        briefVerses: [
+          {
+            ref: "בראשית ב׳:ג׳",
+            he: "וַיְבָרֶךְ אֱלֹהִים אֶת־יוֹם הַשְּׁבִיעִי וַיְקַדֵּשׁ אֹתוֹ כִּי בוֹ שָׁבַת מִכָּל־מְלַאכְתּוֹ אֲשֶׁר־בָּרָא אֱלֹהִים לַעֲשׂוֹת׃",
+            en: "And God blessed the seventh day and hallowed it, because on it he rested from all his work which God had created to make."
+          }
+        ],
+        briefNarration: [
+          { he: "זה הדבר הראשון שמתקדש. לא מקום. לא חפץ. זמן.", en: "This is the first thing made holy. Not a place. Not an object. Time.", dwell: 3800 }
+        ]
       }
     ]
   },
@@ -1072,5 +1143,358 @@ export const SCRIPT = Object.freeze({
       { he: "גירוש", en: "Exile" }
     ],
     epilogue: { he: "זה לא סוף הסיפור. זה רק סוף הגן.", en: "This is not the end of the story. It is only the end of the garden." }
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // EXCHANGES — interactive dialogue scenes (same node shape as serpent.toEve).
+  // `voice` is whoever speaks to the player. `sway` is the pull of the scene:
+  //   command    — how much the one "no" weighs on a mind that never met one (0..2)
+  //   firstWords — warmth (0..3)
+  //   blame      — distance from "I" (0 owns it, 3 hands it to her)
+  // ───────────────────────────────────────────────────────────────────────────
+  exchanges: {
+    // A — the command about the Tree. The player is ADAM, answering God.
+    command: {
+      nodes: [
+        {
+          id: "eat",
+          voice: {
+            he: "מִכֹּל עֵץ־הַגָּן אָכֹל תֹּאכֵל׃",
+            en: "Of every tree of the garden thou mayest freely eat."
+          },
+          gloss: {
+            he: "המילה הראשונה שנאמרת לו היא היתר. הוא לא ידע שצריך היתר. עכשיו הוא יודע שיש מי שנותן — ומי שנותן יכול גם שלא.",
+            en: "The first word said to him is a permission. He did not know permission was needed. Now he knows there is someone who grants — and one who grants can also withhold."
+          },
+          replies: [
+            {
+              he: "מכל? ...לא ידעתי שיש לזה קצה. חשבתי שזה פשוט כאן.",
+              en: "Of every one? ...I did not know there was an edge to it. I thought it was simply here.",
+              sway: 1,
+              retort: { he: "זה כאן. ובשבילך.", en: "It is here. And it is for you." }
+            },
+            {
+              he: "אכלתי כבר. הבוקר. זה היה בסדר?",
+              en: "I already ate. This morning. Was that all right?",
+              sway: 0,
+              retort: { he: "זה היה בסדר. בשביל זה נטעתי.", en: "It was all right. That is why I planted." }
+            },
+            {
+              he: "תודה. אני לא יודע מה אומרים כשנותנים לך. אין לי עדיין מילה לזה.",
+              en: "Thank you. I do not know what one says when one is given something. I have no word for it yet.",
+              sway: 2,
+              retort: { he: "עכשיו יש לך.", en: "Now you have one." }
+            }
+          ]
+        },
+        {
+          id: "one-tree",
+          voice: {
+            he: "וּמֵעֵץ הַדַּעַת טוֹב וָרָע לֹא תֹאכַל מִמֶּנּוּ כִּי בְּיוֹם אֲכָלְךָ מִמֶּנּוּ מוֹת תָּמוּת׃",
+            en: "But of the tree of the knowledge of good and evil, thou shalt not eat of it: for in the day that thou eatest thereof thou shalt surely die."
+          },
+          gloss: {
+            he: "ה'לא' הראשון בעולם, ומילה שאין לה עדיין על מה להצביע: מוות. את הציווי הוא ישמור. את המילה הוא ימסור הלאה — ובדרך היא תתעבה.",
+            en: "The first 'no' in the world, and a word with nothing yet to point at: death. The command he will keep. The word he will pass on — and on the way it will thicken."
+          },
+          replies: [
+            {
+              he: "בסדר. עץ אחד. יש כאן כל כך הרבה — למה שארצה דווקא אותו?",
+              en: "All right. One tree. There is so much here — why would I want that one?",
+              sway: 0,
+              retort: { he: "למה, באמת.", en: "Why, indeed." }
+            },
+            {
+              he: "למה דווקא הוא? הוא נראה כמו כל העצים.",
+              en: "Why that one? It looks like all the trees.",
+              sway: 1,
+              retort: { he: "כן. הוא נראה כמו כולם.", en: "Yes. It looks like all of them." }
+            },
+            {
+              he: "'מות תמות'. ...מה זה? זה משהו שעושים? זה מקום?",
+              en: "'Surely die.' ...What is that? Is it something one does? Is it a place?",
+              sway: 2,
+              retort: { he: "זה מה שלא תדע, כל עוד לא תאכל.", en: "It is what you will not know, so long as you do not eat." }
+            }
+          ]
+        }
+      ],
+      close: {
+        narration: [
+          { he: "הוא מהנהן. זה נראה קל.", en: "He nods. It seems easy.", dwell: 4000 },
+          { he: "הוא לא שם לב שמעכשיו יש בגן מקום אחד שהוא כבר לא מסתכל עליו סתם.", en: "He does not notice that from now on there is one place in the garden he no longer looks at simply.", dwell: 5200 }
+        ]
+      }
+    },
+
+    // B — the first conversation. The player is ADAM; Eve speaks to him.
+    firstWords: {
+      nodes: [
+        {
+          id: "awake",
+          voice: {
+            he: "התעוררת. חיכיתי. לא ידעתי שאני יודעת לחכות, עד שחיכיתי.",
+            en: "You are awake. I waited. I did not know I knew how to wait, until I waited."
+          },
+          gloss: {
+            he: "המילים הראשונות שנאמרות בגן בין שני בני אדם הן על זמן. היא כבר למדה משהו שהוא לא: להיות בלי מישהו לרגע, ולדעת שהוא יחזור.",
+            en: "The first words said in the garden between two humans are about time. She has already learned something he has not: to be without someone for a moment, and to know he will come back."
+          },
+          replies: [
+            {
+              he: "את... מדברת. הקול לא חוזר אליי מהעצים. הוא בא ממישהו.",
+              en: "You... speak. The voice does not come back to me off the trees. It comes from someone.",
+              sway: 2,
+              retort: { he: "ממישהי. כן. תגיד עוד משהו — אני רוצה לשמוע איך זה נשמע כשזה לא אני.", en: "From someone. Yes. Say something else — I want to hear what it sounds like when it is not me." }
+            },
+            {
+              he: "חיכית. אף אחד עוד לא חיכה לי. בואי, שבי. יש לי כאן צל ולא היה לי עם מי לחלוק אותו.",
+              en: "You waited. No one has ever waited for me. Come, sit. I have shade here and no one to share it with.",
+              sway: 3,
+              retort: { he: "צל. אתה מתחיל מהצל? ...טוב. אני יושבת.", en: "Shade. You begin with the shade? ...All right. I am sitting." }
+            },
+            {
+              he: "ישנתי? כמה זמן? משהו כואב לי בצד. את לא במקרה יודעת למה?",
+              en: "Was I asleep? For how long? Something aches in my side. You would not happen to know why?",
+              sway: 1,
+              retort: { he: "אולי. אל תסתכל עליי ככה — אני עוד לא יודעת מה זה 'ככה'.", en: "Perhaps. Do not look at me like that — I do not yet know what 'like that' is." }
+            }
+          ]
+        },
+        {
+          id: "names",
+          voice: {
+            he: "לכל דבר כאן יש שם? זה — מה זה? ואתה? איך קוראים לך?",
+            en: "Does everything here have a name? That — what is that? And you? What are you called?"
+          },
+          gloss: {
+            he: "הוא קרא בשם לכל חיה, ואף אחת לא שאלה. היא הראשונה ששואלת. לקרוא בשם ולהישאל — לא אותו הדבר.",
+            en: "He named every beast, and not one asked. She is the first to ask. To name and to be asked are not the same thing."
+          },
+          replies: [
+            {
+              he: "לא יודע. לכל דבר נתתי שם, ולי — אף אחד לא נתן. אולי את תיתני.",
+              en: "I do not know. I gave everything a name, and no one gave me one. Perhaps you will.",
+              sway: 2,
+              retort: { he: "אני? ...אני צריכה קודם להכיר אותך. תן לי יום.", en: "Me? ...I need to know you first. Give me a day." }
+            },
+            {
+              he: "זאת תאנה. זה נהר. ואני — אני מי שיושב לידך. לזה עוד אין שם.",
+              en: "That is a fig tree. That is a river. And I — I am the one sitting beside you. That has no name yet.",
+              sway: 3,
+              retort: { he: "'מי שיושב לידי'. זה ארוך. אבל זה נכון.", en: "'The one sitting beside me.' It is long. But it is true." }
+            },
+            {
+              he: "זה עץ. זה גם עץ. זה — עץ. לא התאמצתי במיוחד עם העצים.",
+              en: "That is a tree. That is also a tree. That one — tree. I did not try very hard with the trees.",
+              sway: 1,
+              retort: { he: "אז יש לי עבודה.", en: "Then I have work to do." }
+            }
+          ]
+        },
+        {
+          id: "without",
+          voice: {
+            he: "כשפקחתי עיניים כבר היית כאן. אני לא יודעת מה זה 'בלי'. אתה יודע?",
+            en: "When I opened my eyes you were already here. I do not know what 'without' is. Do you?"
+          },
+          gloss: {
+            he: "היא לא תדע לעולם את הבדידות שקדמה לה. הוא לא יוכל לשכוח אותה. זה הפער היחיד ביניהם, וכרגע הוא לא מעיק.",
+            en: "She will never know the loneliness that came before her. He will never be able to forget it. It is the only gap between them, and for now it does not weigh."
+          },
+          replies: [
+            {
+              he: "ידעתי. עד לפני רגע. ואני כבר לא בטוח איך זה היה.",
+              en: "I knew. Until a moment ago. And I am already not sure how it was.",
+              sway: 2,
+              retort: { he: "אז אל תיזכר. תישאר כאן.", en: "Then do not remember. Stay here." }
+            },
+            {
+              he: "עצם מעצמיי. אני לא יודע מה זה אומר. אני רק יודע שזה את.",
+              en: "Bone of my bones. I do not know what it means. I only know it is you.",
+              sway: 3,
+              retort: { he: "'זאת הפעם' — ככה אמרת כשראית אותי. זה הדבר הראשון ששמעתי.", en: "'This one, at last' — that is what you said when you saw me. It is the first thing I ever heard." }
+            },
+            {
+              he: "'בלי'? זה כשהנשר מסתכל עלייך ואת אומרת לו משהו והוא לא עונה. ניסיתי. פעמיים.",
+              en: "'Without'? It is when the eagle looks at you and you say something to it and it does not answer. I tried. Twice.",
+              sway: 1,
+              retort: { he: "(היא צוחקת. הצליל הזה עוד לא נשמע בגן.) טוב. אני עונה.", en: "(She laughs. That sound has not been heard in the garden before.) Well. I answer." }
+            }
+          ]
+        }
+      ],
+      close: {
+        narration: [
+          { he: "הם יושבים. אף אחד לא מדבר, ובפעם הראשונה השקט הוא של שניים.", en: "They sit. No one speaks, and for the first time the quiet belongs to two.", dwell: 5200 },
+          { he: "ולא יתבוששו. אין עדיין ממה.", en: "And they were not ashamed. There is nothing yet to be ashamed of.", dwell: 4800 }
+        ]
+      }
+    },
+
+    // C — "אַיֶּכָּה" and the blaming. The player is ADAM, answering God.
+    blame: {
+      nodes: [
+        {
+          id: "ayeka",
+          voice: {
+            he: "אַיֶּכָּה׃",
+            en: "Where art thou?"
+          },
+          gloss: {
+            he: "הוא יודע איפה. השאלה היא פתח — הראשון מתוך ארבעה. ככל שעונים עליה מאוחר יותר, היא שווה פחות.",
+            en: "He knows where. The question is an opening — the first of four. The later it is answered, the less it is worth."
+          },
+          replies: [
+            {
+              he: "את קולך שמעתי בגן, ופחדתי — כי אני עירום. אז התחבאתי.",
+              en: "I heard thy voice in the garden, and I was afraid, because I am naked; so I hid.",
+              sway: 1,
+              retort: { he: "פחדת. אתמול לא ידעת מה זה.", en: "You were afraid. Yesterday you did not know what that was." }
+            },
+            {
+              he: "כאן. בין העצים. אני יוצא.",
+              en: "Here. Among the trees. I am coming out.",
+              sway: 0,
+              retort: { he: "צא.", en: "Come out." }
+            },
+            {
+              he: "...אנחנו כאן. שנינו.",
+              en: "...We are here. Both of us.",
+              sway: 2,
+              retort: { he: "שאלתי אותך.", en: "I asked you." }
+            }
+          ]
+        },
+        {
+          id: "who-told",
+          voice: {
+            he: "מִי הִגִּיד לְךָ כִּי עֵירֹם אָתָּה הֲמִן־הָעֵץ אֲשֶׁר צִוִּיתִיךָ לְבִלְתִּי אֲכָל־מִמֶּנּוּ אָכָלְתָּ׃",
+            en: "Who told thee that thou wast naked? Hast thou eaten of the tree, whereof I commanded thee that thou shouldest not eat?"
+          },
+          gloss: {
+            he: "שאלה של כן או לא. מילה אחת הייתה מספיקה. שים לב כמה מילים נדרשות כדי לא לומר אותה. כל מילה נוספת היא מרחק.",
+            en: "A yes-or-no question. One word would do. Notice how many words it takes not to say it. Every added word is distance."
+          },
+          replies: [
+            {
+              he: "כן.",
+              en: "Yes.",
+              sway: 0,
+              retort: { he: "אז אתה יודע למה אתה עירום.", en: "Then you know why you are naked." }
+            },
+            {
+              he: "פחדתי שתשאל את זה.",
+              en: "I was afraid you would ask that.",
+              sway: 1,
+              retort: { he: "ועכשיו שאלתי.", en: "And now I have asked." }
+            },
+            {
+              he: "עירום? ...אף אחד לא אמר לי. פשוט ראיתי.",
+              en: "Naked? ...No one told me. I simply saw.",
+              sway: 2,
+              retort: { he: "ראית. אתמול לא ראית.", en: "You saw. Yesterday you did not see." }
+            }
+          ]
+        },
+        {
+          id: "the-woman",
+          voice: {
+            he: "הֲמִן־הָעֵץ אֲשֶׁר צִוִּיתִיךָ לְבִלְתִּי אֲכָל־מִמֶּנּוּ אָכָלְתָּ׃",
+            en: "Hast thou eaten of the tree, whereof I commanded thee that thou shouldest not eat?"
+          },
+          gloss: {
+            he: "השאלה חוזרת, בלי תוספת. זו לא חקירה — הוא יודע. זה מקום להניח בו את המילה 'אני'. ראה מי יונח שם במקומה. מי שמניח שם מישהו אחר נשאר לעמוד שם לבד.",
+            en: "The question returns, unadorned. This is not an interrogation — he knows. It is a place to set down the word 'I'. Watch who gets set down there instead. Whoever puts another there is left standing there alone."
+          },
+          replies: [
+            {
+              he: "אכלתי. היא נתנה לי, ואני לקחתי. הידיים היו שלי.",
+              en: "I ate. She gave it to me, and I took it. The hands were mine.",
+              sway: 0,
+              retort: { he: "שלך.", en: "Yours." }
+            },
+            {
+              he: "אכלנו. שנינו. היא קודם.",
+              en: "We ate. Both of us. She first.",
+              sway: 2,
+              retort: { he: "שאלתי על 'אתה'.", en: "I asked about 'thou'." }
+            },
+            {
+              he: "האישה אשר נתת עמדי — היא נתנה לי מן העץ, ואכלתי.",
+              en: "The woman whom thou gavest to be with me, she gave me of the tree, and I did eat.",
+              sway: 3,
+              retort: { he: "(הוא לא עונה לו. הוא פונה אליה.)", en: "(He does not answer him. He turns to her.)" }
+            }
+          ]
+        },
+        {
+          id: "what-is-this",
+          voice: {
+            he: "מַה־זֹּאת עָשִׂית׃",
+            en: "What is this that thou hast done?"
+          },
+          gloss: {
+            he: "השאלה עוברת ממנו אליה. בכתוב, הוא דיבר פעמיים ולא אמר 'אני' אף פעם. מה שבחרת — נאמר, ואי אפשר לקחת בחזרה. עכשיו הוא ישמע איך זה נשמע מבחוץ.",
+            en: "The question passes from him to her. In the text, he spoke twice and never once said 'I'. Whatever you chose — it was said, and cannot be taken back. Now he hears what it sounds like from the outside."
+          },
+          replies: [
+            {
+              he: "חכה. מה שאמרתי — זה לא היה עליה. זה היה עליי.",
+              en: "Wait. What I said — it was not about her. It was about me.",
+              sway: 0,
+              retort: { he: "(היא עונה לפניו, בלי להביט בו.) הַנָּחָשׁ הִשִּׁיאַנִי וָאֹכֵל׃", en: "(She answers before he can, without looking at him.) The serpent beguiled me, and I did eat." }
+            },
+            {
+              he: "(הוא שותק.)",
+              en: "(He says nothing.)",
+              sway: 2,
+              retort: { he: "(היא מחכה רגע — שיגיד משהו. הוא לא.) הַנָּחָשׁ הִשִּׁיאַנִי וָאֹכֵל׃", en: "(She waits a moment — for him to say something. He does not.) The serpent beguiled me, and I did eat." }
+            },
+            {
+              he: "תגידי לו. תגידי לו מי התחיל.",
+              en: "Tell him. Tell him who started it.",
+              sway: 3,
+              retort: { he: "(היא לומדת ממנו מהר.) הַנָּחָשׁ הִשִּׁיאַנִי וָאֹכֵל׃", en: "(She learns from him quickly.) The serpent beguiled me, and I did eat." }
+            }
+          ]
+        }
+      ],
+      close: {
+        narration: [
+          { he: "שלושה עומדים שם. שניים נשאלים. כל אחד מצביע על מי שלידו. הנחש לא נשאל — אין לו על מי להצביע.", en: "Three stand there. Two are questioned. Each points at whoever is beside him. The serpent is not asked — it has no one to point at.", dwell: 5600 },
+          { he: "'האישה אשר נתת עמדי'. לפני יום אחד הוא קרא לה עצם מעצמיו. היא שמעה את שני המשפטים.", en: "'The woman thou gavest to be with me.' One day ago he called her bone of his bones. She heard both sentences.", dwell: 5800 }
+        ]
+      }
+    }
+  },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // NAMING — the player types the creature's name. {name} is substituted by the
+  // engine. Hebrew strings never begin with {name}, so the paragraph stays RTL
+  // when a Latin-script name is dropped in.
+  // ───────────────────────────────────────────────────────────────────────────
+  naming: {
+    prompt: { he: "איך תקרא לו?", en: "What will you call it?" },
+    placeholder: { he: "שם…", en: "a name…" },
+    skip: { he: "שיישאר בשמו", en: "Let it keep its name" },
+    reactions: [
+      { he: "אז — {name}. כן. ככה זה נשמע כשזה נכון.", en: "So — {name}. Yes. That is what it sounds like when it is right." },
+      { he: "אמרתי את זה בקול: {name}. והוא הסתובב. אני חושב שהוא הסתובב.", en: "I said it aloud: {name}. And it turned. I think it turned." },
+      { he: "לא היה לזה שם עד עכשיו. עכשיו יש: {name}. אני עשיתי את זה.", en: "It had no name until now. Now it has one: {name}. I did that." },
+      { he: "אני טועם את המילה. {name}. היא נשארת בפה אחרי שהוא הולך.", en: "I taste the word. {name}. It stays in the mouth after it has gone." },
+      { he: "הוא נראה כמו {name}. ברור שהוא נראה כמו {name} — זה השם שלו.", en: "It looks like a {name}. Of course it looks like a {name} — that is its name." },
+      { he: "עוד מעט כל אחד מהם יידע מי הוא. זה — {name}.", en: "Soon every one of them will know what it is. This one — {name}." },
+      { he: "אם אקרא לו {name} והוא יבוא — אז זה שלו. אני מנסה. ...הוא בא.", en: "If I call it {name} and it comes — then it is its own. I try it. ...It comes." },
+      { he: "פעם אחת, ובזה זה נגמר: {name}. אף אחד לא ישנה את זה אחריי.", en: "Once, and it is done: {name}. No one will change it after me." }
+    ],
+    afterPair: [
+      { he: "הם הולכים. ביחד. השם נשאר אצלי.", en: "They go. Together. The name stays with me." },
+      { he: "הוא לא צריך את השם כדי למצוא אותה. היא כבר שם.", en: "It does not need the name to find her. She is already there." },
+      { he: "נתתי להם מילה. הם לקחו אותה והלכו שניים.", en: "I gave them a word. They took it and left as two." },
+      { he: "עוד זוג. אני סופר אותם. את עצמי אני לא סופר.", en: "Another pair. I count them. I do not count myself." }
+    ],
+    given: { he: "קראת לו", en: "you called it" },
+    traditional: { he: "שמו בכתוב", en: "its name in the text" }
   }
 });

@@ -105,9 +105,20 @@ export class Figure {
     this._t = rng() * 10;
     this._breath = 1;
 
+    // Hair and eyes use the same shader as skin, so every dial the acts reach
+    // for — opacity, desaturate, light level, glow — moves the whole person.
+    this.hairMat = fleshMaterial({
+      color: female ? 0x3a2418 : 0x2e1d14,
+      deep: 0x120a06, rimColor: female ? 0xc08a52 : 0x8a6038, rim: 1.1,
+    });
+    this.eyeMat = fleshMaterial({
+      color: 0x241812, deep: 0x080505, rimColor: 0xfff4e0, rim: 2.6,
+    });
+    this.materials = [this.material, this.hairMat, this.eyeMat];
+
     const M = this.material;
-    const mesh = (geo, parent, pos = [0, 0, 0]) => {
-      const m = new THREE.Mesh(geo, M);
+    const mesh = (geo, parent, pos = [0, 0, 0], mat = M) => {
+      const m = new THREE.Mesh(geo, mat);
       m.position.set(...pos);
       m.castShadow = true; m.receiveShadow = true;
       parent.add(m);
@@ -123,56 +134,148 @@ export class Figure {
     };
 
     const f = female ? 1 : 0;
-    const shoulderW = lerp(.21, .17, f);
-    const hipW = lerp(.115, .13, f);
-    const chestR = lerp(.175, .155, f);
+    const lo = isMobile();
+    const seg = (n) => (lo ? Math.max(6, Math.round(n * .6)) : n);
+    const shoulderW = lerp(.205, .168, f);
+    const hipW = lerp(.115, .128, f);
+    const chestR = lerp(.172, .150, f);
+    const HAIR = this.hairMat, EYE = this.eyeMat;
 
-    // pelvis → spine
+    /* ── torso ──
+       Widths matter more than detail: the ribcage must stay narrower than the
+       shoulders, and the waist narrower than both, or the figure reads as a
+       stack of blobs rather than a person. */
+    // Each mass overlaps its neighbour by at least 0.10, or the joins read as
+    // separate balls stacked on each other instead of one body.
     const pelvis = bone('pelvis', this.root, [0, 1.0, 0]);
-    mesh(new THREE.SphereGeometry(lerp(.145, .155, f), 12, 10).scale(1.25, .85, .9), pelvis);
+    const hips = mesh(new THREE.SphereGeometry(.118, seg(16), seg(12)), pelvis, [0, -.010, 0]);
+    hips.scale.set(lerp(1.28, 1.38, f), 1.05, .88);
 
     const spine = bone('spine', pelvis, [0, 0, 0]);
-    const chest = bone('chest', spine, [0, .3, 0]);
-    const torso = mesh(cap(chestR, .34), chest, [0, .3, 0]);
-    torso.scale.set(1.3, 1, .82);
+    const waist = mesh(new THREE.SphereGeometry(.102, seg(16), seg(12)), spine, [0, .160, 0]);
+    waist.scale.set(lerp(1.18, 1.10, f), 1.55, .80);
 
-    const neck = bone('neck', chest, [0, .34, 0]);
-    mesh(cap(.052, .09), neck, [0, .09, 0]);
-    const head = bone('head', neck, [0, .1, 0]);
-    const skull = mesh(new THREE.SphereGeometry(.125, 16, 14), head, [0, .12, 0]);
-    skull.scale.set(.88, 1.08, .95);
-    // no face — the light does the acting
+    const chest = bone('chest', spine, [0, .3, 0]);
+    const ribs = mesh(new THREE.SphereGeometry(.126, seg(18), seg(14)), chest, [0, .095, 0]);
+    ribs.scale.set(lerp(1.33, 1.22, f), 1.45, .80);
+    const upperChest = mesh(new THREE.SphereGeometry(.110, seg(16), seg(12)), chest, [0, .260, 0]);
+    upperChest.scale.set(lerp(1.58, 1.44, f), .95, .84);
     if (female) {
-      const hair = mesh(new THREE.SphereGeometry(.142, 14, 12), head, [0, .14, -.02]);
-      hair.scale.set(.92, 1.0, 1.0);
-      hair.material = M;
+      for (const s of [-1, 1]) {
+        const b = mesh(new THREE.SphereGeometry(.046, seg(12), seg(10)), chest, [s * .052, .150, .066]);
+        b.scale.set(1, .92, .72);
+      }
     }
 
-    // arms
+    /* ── neck and head ── */
+    const neck = bone('neck', chest, [0, .34, 0]);
+    const nk = mesh(new THREE.CylinderGeometry(.046, .056, .12, seg(12)), neck, [0, .052, -.006]);
+    nk.rotation.x = -.07;
+
+    const head = bone('head', neck, [0, .1, 0]);
+    const HY = .12;                            // head centre, in head-bone space
+    const skull = mesh(new THREE.SphereGeometry(.125, seg(22), seg(18)), head, [0, HY, 0]);
+    skull.scale.set(.86, 1.04, .94);           // semi-axes: x .1075  y .130  z .1175
+
+    // jaw tapering to a chin
+    const jaw = mesh(new THREE.SphereGeometry(.090, seg(14), seg(11)), head, [0, HY - .056, .014]);
+    jaw.scale.set(lerp(.92, .86, f), lerp(.80, .76, f), 1.00);
+    const chin = mesh(new THREE.SphereGeometry(.038, seg(10), seg(8)), head, [0, HY - .092, .052]);
+    chin.scale.set(lerp(.98, .88, f), .76, .96);
+
+    // Features sit just proud of the skull surface. The z values below are the
+    // ellipsoid's own surface at each height, nudged outward so nothing sinks in.
+    for (const s of [-1, 1]) {
+      // a flattened ellipsoid, not a capsule — a capsule's axis is hard to aim
+      const brow = mesh(new THREE.SphereGeometry(.021, seg(10), seg(8)), head, [s * .044, HY + .032, .094]);
+      brow.scale.set(2.0, .42, .48);
+      brow.rotation.z = -s * .14;
+    }
+    for (const s of [-1, 1]) {
+      const eye = mesh(new THREE.SphereGeometry(.0205, seg(12), seg(9)), head, [s * .046, HY + .010, .0965], EYE);
+      eye.scale.set(1, .80, .62);
+    }
+    const bridge = mesh(new THREE.CapsuleGeometry(.0115, .046, 2, seg(7)), head, [0, HY + .008, .1035]);
+    bridge.rotation.x = .26;
+    bridge.scale.set(1, 1, .74);
+    const tip = mesh(new THREE.SphereGeometry(.0225, seg(12), seg(9)), head, [0, HY - .026, .1105]);
+    tip.scale.set(.96, .84, 1.0);
+    const lip = mesh(new THREE.CapsuleGeometry(.0105, .034, 2, seg(7)), head, [0, HY - .064, .0955]);
+    lip.rotation.set(0, 0, Math.PI / 2);
+    lip.scale.set(1, 1, .62);
+
+    for (const s of [-1, 1]) {
+      const ear = mesh(new THREE.SphereGeometry(.026, seg(10), seg(8)), head, [s * .100, HY - .004, -.006]);
+      ear.scale.set(.34, 1.10, .74);
+    }
+
+    /* ── hair ──
+       A cap tipped backwards, so the hairline sits above the brow at the front
+       and the hair covers the back of the skull. Sized to the skull, never over it. */
+    const capGeo = (r, sweep) => new THREE.SphereGeometry(r, seg(20), seg(15), 0, Math.PI * 2, 0, sweep);
+    const crown = mesh(capGeo(.129, Math.PI * (female ? .54 : .47)), head, [0, HY + .002, -.004], HAIR);
+    crown.scale.set(.885, 1.055, .955);
+    crown.rotation.x = -.34;
+
+    if (female) {
+      // length down the back, and a lock either side of the face
+      const fall = mesh(new THREE.SphereGeometry(.098, seg(16), seg(13)), head, [0, HY - .125, -.052], HAIR);
+      fall.scale.set(1.02, 2.0, .80);
+      for (const s of [-1, 1]) {
+        const lock = mesh(new THREE.CapsuleGeometry(.024, .125, 2, seg(8)), head, [s * .090, HY - .085, .010], HAIR);
+        lock.rotation.set(.06, 0, s * .09);
+        lock.scale.set(.78, 1, .64);
+      }
+    }
+
+    /* ── arms ── */
     for (const s of [-1, 1]) {
       const side = s < 0 ? 'L' : 'R';
-      const sh = bone('shoulder' + side, chest, [s * shoulderW, .3, 0]);
-      mesh(new THREE.SphereGeometry(.062, 10, 8), sh);
+      const sh = bone('shoulder' + side, chest, [s * shoulderW, .268, 0]);
+      const delt = mesh(new THREE.SphereGeometry(lerp(.070, .060, f), seg(12), seg(10)), sh);
+      delt.scale.set(1, 1.15, 1);
       const up = bone('upperArm' + side, sh, [0, 0, 0]);
-      mesh(cap(lerp(.054, .046, f), .26), up);
+      mesh(cap(lerp(.058, .049, f), .26, seg(10)), up);
+      const elbow = mesh(new THREE.SphereGeometry(lerp(.046, .039, f), seg(10), seg(8)), up, [0, -.285, 0]);
+      elbow.scale.set(1, .9, 1);
       const fore = bone('forearm' + side, up, [0, -.3, 0]);
-      mesh(cap(lerp(.044, .038, f), .24), fore);
+      const fa = mesh(cap(lerp(.046, .039, f), .24, seg(10)), fore);
+      fa.scale.set(1, 1, .92);
+
       const hand = bone('hand' + side, fore, [0, -.27, 0]);
-      const h = mesh(new THREE.SphereGeometry(.052, 8, 8), hand, [0, -.03, 0]);
-      h.scale.set(.75, 1.2, .5);
+      const palm = mesh(new THREE.SphereGeometry(.042, seg(10), seg(8)), hand, [0, -.032, 0]);
+      palm.scale.set(.82, 1.25, .46);
+      // four fingers as one soft mass, plus a thumb — enough to read as a hand
+      const fingers = mesh(new THREE.CapsuleGeometry(.0185, .052, 2, seg(8)), hand, [0, -.086, .004]);
+      fingers.scale.set(1.75, 1, .55);
+      const thumb = mesh(new THREE.CapsuleGeometry(.0145, .030, 2, seg(7)), hand, [s * -.034, -.050, .012]);
+      thumb.rotation.set(0, 0, s * .62);
     }
 
-    // legs
+    /* ── legs ── */
     for (const s of [-1, 1]) {
       const side = s < 0 ? 'L' : 'R';
       const hip = bone('hip' + side, pelvis, [s * hipW, -.08, 0]);
       const thigh = bone('thigh' + side, hip, [0, 0, 0]);
-      mesh(cap(lerp(.078, .082, f), .36), thigh);
+      const th = mesh(cap(lerp(.086, .089, f), .36, seg(11)), thigh);
+      th.scale.set(1, 1, .95);
+      const knee = mesh(new THREE.SphereGeometry(lerp(.062, .058, f), seg(10), seg(8)), thigh, [0, -.40, .006]);
+      knee.scale.set(1, .88, 1);
       const shin = bone('shin' + side, thigh, [0, -.42, 0]);
-      mesh(cap(lerp(.058, .055, f), .34), shin);
+      // reaches all the way down to the ankle, so no gap opens above the foot
+      const calf = mesh(cap(lerp(.060, .056, f), .40, seg(11)), shin);
+      calf.scale.set(1, 1, .96);
+
+      // placed so the sole lands on y=0 when standing, not hovering above it
       const foot = bone('foot' + side, shin, [0, -.4, 0]);
-      const ft = mesh(new THREE.SphereGeometry(.07, 8, 6), foot, [0, -.02, .05]);
-      ft.scale.set(.8, .5, 1.7);
+      const ankle = mesh(new THREE.SphereGeometry(.044, seg(10), seg(8)), foot, [0, -.034, .004]);
+      ankle.scale.set(.92, 1, .92);
+      const ft = mesh(new THREE.SphereGeometry(.062, seg(10), seg(8)), foot, [0, -.072, .046]);
+      ft.scale.set(.82, .46, 1.78);
+      const toes = mesh(new THREE.SphereGeometry(.040, seg(9), seg(7)), foot, [0, -.080, .116]);
+      toes.scale.set(1.06, .5, .72);
+      const heel = mesh(new THREE.SphereGeometry(.036, seg(9), seg(7)), foot, [0, -.070, -.030]);
+      heel.scale.set(.92, .62, .8);
     }
 
     this.root.scale.setScalar(scale);
@@ -221,7 +324,7 @@ export class Figure {
 
   update(dt) {
     this._t += dt;
-    this.material.uniforms.uTime.value = this._t;
+    for (const m of this.materials) m.uniforms.uTime.value = this._t;
 
     // ease toward the target pose
     const k = 1 - Math.pow(.015, dt);
@@ -259,19 +362,21 @@ export class Figure {
   }
 
   /* ── expressive dials ── */
+  // Skin-only: glow and rim read as the body being lit from within.
   set glow(v) { this.material.uniforms.uGlow.value = v; }
   get glow() { return this.material.uniforms.uGlow.value; }
   set rim(v) { this.material.uniforms.uRim.value = v; }
-  set desaturate(v) { this.material.uniforms.uDesaturate.value = clamp(v); }
-  set lightLevel(v) { this.material.uniforms.uLight.value = clamp(v); }
-  set opacity(v) { this.material.uniforms.uOpacity.value = clamp(v); }
+  // Whole-person: hair and eyes have to fade, bleach and darken with the skin.
+  set desaturate(v) { for (const m of this.materials) m.uniforms.uDesaturate.value = clamp(v); }
+  set lightLevel(v) { for (const m of this.materials) m.uniforms.uLight.value = clamp(v); }
+  set opacity(v) { for (const m of this.materials) m.uniforms.uOpacity.value = clamp(v); }
   get opacity() { return this.material.uniforms.uOpacity.value; }
-  setLight(dir) { this.material.uniforms.uLightDir.value.copy(dir).normalize(); }
+  setLight(dir) { for (const m of this.materials) m.uniforms.uLightDir.value.copy(dir).normalize(); }
   set visible(v) { this.root.visible = v; }
 
   dispose() {
     this.root.traverse(o => o.geometry?.dispose?.());
-    this.material.dispose();
+    for (const m of this.materials) m.dispose();
   }
 }
 

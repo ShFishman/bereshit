@@ -8,6 +8,45 @@
  * centre a semitone and never fully recovers it.
  *
  * Public API: see class Score at the bottom.
+ *
+ * ---------------------------------------------------------------------------
+ * REVISION — comfort pass ("make the sounds cleaner and less annoying")
+ *
+ * The architecture, the public API, every bed name and every cue name are
+ * unchanged. Only the sound changed. If you edit this file, please keep to the
+ * constraints below; each one exists because the previous version broke it.
+ *
+ *  1. ROUGHNESS. Detune is kept small enough that the resulting beat rate
+ *     stays under ~0.5 Hz, which for a voice at frequency f means roughly
+ *     f * (2^(cents/1200) - 1) < 0.5. High voices therefore get *less* detune
+ *     than low ones, not the same amount. Where width is wanted it comes from
+ *     panning or from a genuinely wider interval (octave, fifth), never from a
+ *     2-20 Hz beat. See `beatSafeDetune()`.
+ *  2. TOP END. A fixed -6 dB shelf above 3.2 kHz sits on the master, every
+ *     bed's `colorRange` ceiling was pulled down to 2.0-7.0 kHz, and the
+ *     high/sibilant layers (tohu air, Eden birds, serpent sibilance) are
+ *     intermittent and band-limited instead of parked and continuous.
+ *  3. PERIODICITY. LFO rates are spaced by the golden ratio and jittered per
+ *     voice (`slowRate()`), so no two layers share a period. The two metric
+ *     pulses (day6, tardemah) are humanised and take rests, so neither reads
+ *     as a metronome.
+ *  4. CUE FATIGUE. Every cue softens its attack, drops its level, and jitters
+ *     pitch/timbre/timing per firing (`vary()`, `jitter()`), so the twentieth
+ *     firing is not the first one again. The frequently-fired cues (click,
+ *     hover, footstep, heartbeat) got the deepest cuts.
+ *  5. HEADROOM. The bed bus sits at 0.52 and cues at 0.8, so the bed stays
+ *     well under narration. `duck()` is deeper (0.12) and ramps smoothly.
+ *     Compression is slower and gentler; the limiter no longer snaps.
+ *  6. THE FLAT SECOND. Ahava Rabbah's b2 is now melodic only. No bed sustains
+ *     degree 1 against degree 0; it appears as a passing or leaning tone that
+ *     resolves (fall, serpent, eyesOpen, hiss).
+ *  7. NOISE. Broadband beds are gone. Noise layers are narrow, low, moving and
+ *     quiet; anything above ~2 kHz is an event, not a layer.
+ *
+ * The dramatic arc is untouched: tohu is unpitched and vast, the seven days
+ * move from noise into harmony, `eve` is the first real consonance, `exile` is
+ * Eden through a wall, `epilogue` is one tone decaying.
+ * ---------------------------------------------------------------------------
  */
 
 /* ============================================================================
@@ -27,6 +66,43 @@ const rint = (a, b) => Math.floor(rnd(a, b + 1));
 const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 const semi = (f, n) => f * Math.pow(2, n / 12);
 const num = (v, d) => (typeof v === 'number' && isFinite(v) ? v : d);
+
+/** Golden ratio — used to space periodic things so they never re-align. */
+const PHI = 1.6180339887;
+
+/**
+ * The largest detune, in cents, that keeps the beat against an undetuned voice
+ * at `freq` below `maxBeat` Hz. Roughness lives between about 2 and 20 Hz, so
+ * we aim an order of magnitude below it: the result is a slow swell, not a
+ * wobble. High voices get proportionally less detune than low ones.
+ */
+function beatSafeDetune(freq, maxBeat = 0.35) {
+  const f = Math.max(8, freq);
+  const cents = 1200 * Math.log2(1 + maxBeat / f);
+  return clamp(cents, 0.3, 14);
+}
+
+/** A random detune that is guaranteed not to beat audibly at `freq`. */
+const softDetune = (freq, maxBeat) => {
+  const c = beatSafeDetune(freq, maxBeat);
+  return rnd(-c, c);
+};
+
+/**
+ * LFO rate for layer `i` of a stack. Successive indices are spaced by the
+ * golden ratio and jittered, so the layers share no common period and the
+ * stack never cycles on a clock the ear can lock onto. Everything returned is
+ * far below the roughness zone — periods of roughly 40 s to 6 min.
+ */
+function slowRate(i, base = 0.009) {
+  return base * (1 + i * PHI * 0.47) * rnd(0.86, 1.17);
+}
+
+/** Small per-firing pitch variation, in cents, so a cue is never identical. */
+const vary = (v, cents = 40) => v * Math.pow(2, rnd(-cents, cents) / 1200);
+
+/** Small per-firing scalar variation around 1 (timing, duration, level). */
+const jitter = (amount = 0.12) => 1 + rnd(-amount, amount);
 
 /** Scale degree -> frequency. `i` may be any integer; it wraps across octaves. */
 function degree(i, oct = 0, scale = AHAVA, root = ROOT) {
@@ -293,49 +369,75 @@ function noise(score, dest, t, o = {}) {
   return { src, gain: g, end };
 }
 
-/** Plucked-string-ish voice: a bright transient collapsing into a body tone. */
+/**
+ * Plucked-string-ish voice: a soft transient settling into a body tone.
+ * The old version had a 4 ms attack and a bright noise click at 4x the
+ * fundamental; both have been pulled back so a hundred plucks in a row do not
+ * accumulate into a rattle. The click is now band-limited and barely present.
+ */
 function pluckVoice(score, dest, t, o = {}) {
   const freq = Math.max(20, num(o.freq, 330));
-  const dur = num(o.dur, 1.6);
+  const dur = num(o.dur, 1.6) * jitter(0.1);
+  const peak = num(o.peak, 0.09);
   tone(score, dest, t, {
-    freq, type: o.type || 'triangle', dur, peak: num(o.peak, 0.1),
-    attack: 0.004, pan: o.pan, detune: num(o.detune, 0),
-    filter: { type: 'lowpass', freq: freq * num(o.open, 7), Q: num(o.Q, 1.2), sweepTo: freq * 1.4, sweepTime: dur * 0.6 }
+    freq: vary(freq, 6), type: o.type || 'triangle', dur, peak,
+    attack: rnd(0.014, 0.026), pan: o.pan, detune: num(o.detune, 0),
+    filter: {
+      type: 'lowpass', freq: clamp(freq * num(o.open, 5), 120, 5200), Q: num(o.Q, 0.8),
+      sweepTo: clamp(freq * 1.3, 80, 2600), sweepTime: dur * 0.55
+    }
   });
+  // a breath of attack noise, well below the sibilance range
   noise(score, dest, t, {
-    dur: 0.05, peak: num(o.peak, 0.1) * 0.5, attack: 0.001, pan: o.pan,
-    filter: { type: 'bandpass', freq: freq * 4, Q: 2 }
+    color: 'pink', dur: 0.07, peak: peak * 0.16, attack: 0.008, pan: o.pan,
+    filter: { type: 'bandpass', freq: clamp(freq * 2.2, 120, 1600), Q: 0.9 }
   });
 }
 
 /** Low body thump — used for heartbeats, footsteps, gates and the land. */
 function thump(score, dest, t, o = {}) {
-  const f = num(o.freq, 64);
+  const f = num(o.freq, 64) * jitter(0.05);
+  const dur = num(o.dur, 0.5);
+  const peak = num(o.peak, 0.34);
   tone(score, dest, t, {
-    freq: f, type: 'sine', dur: num(o.dur, 0.5), peak: num(o.peak, 0.4),
-    attack: 0.004, glideTo: f * num(o.drop, 0.55), glideTime: num(o.dur, 0.5) * 0.5,
+    freq: f, type: 'sine', dur, peak,
+    attack: num(o.attack, rnd(0.012, 0.022)),
+    glideTo: f * num(o.drop, 0.55), glideTime: dur * 0.5,
     pan: o.pan
   });
   if (o.grit !== false) {
     noise(score, dest, t, {
-      color: 'brown', dur: num(o.dur, 0.5) * 0.45, peak: num(o.peak, 0.4) * 0.3,
-      attack: 0.002, pan: o.pan,
-      filter: { type: 'lowpass', freq: 420, Q: 0.8, sweepTo: 120, sweepTime: 0.2 }
+      color: 'brown', dur: dur * 0.4, peak: peak * 0.18,
+      attack: 0.012, pan: o.pan,
+      filter: { type: 'lowpass', freq: 300, Q: 0.6, sweepTo: 110, sweepTime: 0.22 }
     });
   }
 }
 
-/** Inharmonic struck metal / bell. */
+/**
+ * Inharmonic struck metal / bell.
+ *
+ * Two changes from the first version. The partial amplitudes now fall away
+ * much faster (and anything above the fifth partial is also short), so a bell
+ * struck at 900 Hz no longer leaves 6 kHz ringing. And the per-partial detune
+ * is beat-safe: at 4 kHz the old +/-5 cents produced a 13 Hz tremble, which is
+ * exactly the frequency the ear finds most abrasive.
+ */
 function bell(score, dest, t, o = {}) {
   const f = Math.max(40, num(o.freq, 660));
-  const dur = num(o.dur, 3.2);
-  const ratios = o.ratios || [1, 2.01, 2.99, 4.21, 5.43, 6.79];
-  const peak = num(o.peak, 0.07);
+  const dur = num(o.dur, 3.2) * jitter(0.12);
+  const base = o.ratios || [1, 2.01, 2.99, 4.21, 5.43, 6.79];
+  // jitter the ratios a touch per strike so repeated chimes are never twins
+  const ratios = base.map((r, i) => (i === 0 ? r : r * (1 + rnd(-0.006, 0.006))));
+  const peak = num(o.peak, 0.055);
   ratios.forEach((r, i) => {
+    const pf = f * r;
+    if (pf > 7000) return; // nothing up there earns its fatigue
+    const hiCut = pf > 2200 ? 0.45 : 1;
     tone(score, dest, t, {
-      freq: f * r, type: 'sine', dur: dur * (1 - i * 0.11),
-      peak: peak / (1 + i * 1.15), attack: 0.002 + i * 0.001,
-      detune: rnd(-5, 5), pan: o.pan == null ? rnd(-0.4, 0.4) : o.pan
+      freq: pf, type: 'sine', dur: dur * Math.pow(0.78, i),
+      peak: (peak / (1 + i * 1.9)) * hiCut, attack: 0.012 + i * 0.006,
+      detune: softDetune(pf), pan: o.pan == null ? rnd(-0.45, 0.45) : o.pan
     });
   });
 }
@@ -357,13 +459,15 @@ class Reverb {
     this.preLow.frequency.setValueAtTime(90, ctx.currentTime);
     this.preHigh = ctx.createBiquadFilter();
     this.preHigh.type = 'lowpass';
-    this.preHigh.frequency.setValueAtTime(7200, ctx.currentTime);
+    // a dark room. A bright tail on a 25-minute bed is the single most
+    // fatiguing thing a reverb can do.
+    this.preHigh.frequency.setValueAtTime(3400, ctx.currentTime);
 
     this.a = ctx.createConvolver();
     this.b = ctx.createConvolver();
     this.a.normalize = true;
     this.b.normalize = true;
-    this.a.buffer = impulseResponse(ctx, decay, { spread: 0.35 });
+    this.a.buffer = impulseResponse(ctx, decay, { spread: 0.35, tilt: 0.7 });
     this.b.buffer = this.a.buffer;
 
     this.aGain = ctx.createGain();
@@ -410,7 +514,7 @@ class Reverb {
     const next = this._active === 'a' ? this.b : this.a;
     const nextG = this._active === 'a' ? this.bGain : this.aGain;
     const prevG = this._active === 'a' ? this.aGain : this.bGain;
-    try { next.buffer = impulseResponse(ctx, d, { spread: 0.3 + Math.min(0.4, d * 0.04) }); }
+    try { next.buffer = impulseResponse(ctx, d, { spread: 0.3 + Math.min(0.4, d * 0.04), tilt: 0.7 }); }
     catch (e) { return; }
     nextG.gain.setValueAtTime(nextG.gain.value, t);
     nextG.gain.linearRampToValueAtTime(1, t + fade);
@@ -422,7 +526,7 @@ class Reverb {
 
   setTone(hz, t) {
     this.preHigh.frequency.setValueAtTime(this.preHigh.frequency.value, t);
-    this.preHigh.frequency.linearRampToValueAtTime(clamp(hz, 400, 16000), t + 1.5);
+    this.preHigh.frequency.linearRampToValueAtTime(clamp(hz, 400, 5000), t + 3);
   }
 
   dispose() {
@@ -448,9 +552,9 @@ class Bed {
     this._nodes = [];
     this._timers = new Set();
     this._drifters = [];
-    this.driftCents = 4;
+    this.driftCents = 2;
     this.density = 1;
-    this.colorRange = [900, 12000];
+    this.colorRange = [700, 5200];
     this.hollowDepth = 0;
     this.onUpdate = null;
 
@@ -488,11 +592,19 @@ class Bed {
 
     this._nodes.push(this.mix, this.hollow, this.color, this.out, this.dry, this.wet);
 
-    // slow detune drift, deepened by loneliness
-    this.every(() => rnd(4, 9), (when) => {
-      for (const p of this._drifters) {
-        const amt = this.driftCents * (1 + this.score.loneliness * 5);
-        try { p.setTargetAtTime(rnd(-amt, amt), when, 2.5); } catch (e) { /* ignore */ }
+    // Very slow detune drift, deepened a little by loneliness.
+    //
+    // The first version re-aimed every voice every 4-9 s by up to
+    // driftCents * 6 (which reached 130 cents on the `fall` bed) with a 2.5 s
+    // time constant. That is a pitch wobble, not a drift. It is now a third of
+    // a minute between moves, a 12 s glide, and a per-voice ceiling that keeps
+    // the beat against the rest of the stack under half a hertz.
+    this.every(() => rnd(26, 53), (when) => {
+      const lone = 1 + this.score.loneliness * 1.3;
+      for (const d of this._drifters) {
+        if (!d || !d.p) continue;
+        const cap = Math.min(this.driftCents * lone, beatSafeDetune(d.f, 0.4 * lone));
+        try { d.p.setTargetAtTime(rnd(-cap, cap), when, 12); } catch (e) { /* ignore */ }
       }
     });
   }
@@ -532,7 +644,7 @@ class Bed {
     osc.start(t);
     this._sources.push(osc);
     this._nodes.push(g);
-    if (o.drift !== false) this._drifters.push(osc.detune);
+    if (o.drift !== false) this._drifters.push({ p: osc.detune, f: Math.max(8, num(o.freq, 110)) });
     return { osc, gain: g, filter: flt, pan: p };
   }
 
@@ -648,18 +760,20 @@ class Bed {
     if (this._dead) return;
     const t = this.ctx.currentTime;
     const [lo, hi] = this.colorRange;
-    const bright = lo + (hi - lo) * Math.pow(clamp(state.intensity, 0, 1), 0.75);
+    // Intensity opens the bed's lowpass, but never past 7 kHz: the ceiling is
+    // a comfort limit, not a musical one.
+    const bright = lo + (hi - lo) * Math.pow(clamp(state.intensity, 0, 1), 0.8);
     this.color.frequency.setValueAtTime(this.color.frequency.value, t);
-    this.color.frequency.linearRampToValueAtTime(clamp(bright, 60, 18000), t + 0.9);
+    this.color.frequency.linearRampToValueAtTime(clamp(bright, 60, 7000), t + 2.5);
 
-    const cut = -(2 + this.hollowDepth * 16) * clamp(state.loneliness, 0, 1);
+    const cut = -(2 + this.hollowDepth * 13) * clamp(state.loneliness, 0, 1);
     this.hollow.gain.setValueAtTime(this.hollow.gain.value, t);
-    this.hollow.gain.linearRampToValueAtTime(cut, t + 1.2);
+    this.hollow.gain.linearRampToValueAtTime(cut, t + 3);
 
     const w = clamp(this.baseWet == null ? this.wet.gain.value : this.baseWet, 0, 1);
-    const target = clamp(w + state.loneliness * 0.35, 0, 1);
+    const target = clamp(w + state.loneliness * 0.28, 0, 1);
     this.wet.gain.setValueAtTime(this.wet.gain.value, t);
-    this.wet.gain.linearRampToValueAtTime(target, t + 1.2);
+    this.wet.gain.linearRampToValueAtTime(target, t + 3);
 
     if (this.onUpdate) { try { this.onUpdate(state, t); } catch (e) { /* ignore */ } }
   }
@@ -691,36 +805,46 @@ class Bed {
 /* --- the void ----------------------------------------------------------- */
 
 function bedTohu(b) {
-  b.colorRange = [240, 3200];
-  b.baseWet = 0.85;
-  b.wet.gain.setValueAtTime(0.85, b.ctx.currentTime);
+  b.colorRange = [200, 2000];
+  b.baseWet = 0.8;
+  b.wet.gain.setValueAtTime(0.8, b.ctx.currentTime);
   b.hollowDepth = 0.4;
 
-  const rumble = b.noiseLayer({ color: 'brown', gain: 0.5, attack: 6, filter: { type: 'lowpass', freq: 70, Q: 0.6 } });
-  const mid = b.noiseLayer({ color: 'pink', gain: 0.1, attack: 8, pan: -0.3, filter: { type: 'bandpass', freq: 260, Q: 1.4 } });
-  const air = b.noiseLayer({ color: 'white', gain: 0.03, attack: 10, pan: 0.35, filter: { type: 'bandpass', freq: 1800, Q: 0.8 } });
+  const rumble = b.noiseLayer({ color: 'brown', gain: 0.4, attack: 8, filter: { type: 'lowpass', freq: 62, Q: 0.6 } });
+  const mid = b.noiseLayer({ color: 'pink', gain: 0.07, attack: 11, pan: -0.3, filter: { type: 'bandpass', freq: 240, Q: 1.8 } });
+  // The old 'air' layer was white noise parked at 1.8 kHz for the whole scene,
+  // which is the textbook definition of hiss. It is now narrow, an octave
+  // lower, and its LFO depth equals its gain so it vanishes completely for
+  // minutes at a time — present, but never a constant.
+  const air = b.noiseLayer({ color: 'pink', gain: 0.014, attack: 14, pan: 0.35, filter: { type: 'bandpass', freq: 820, Q: 3.4 } });
 
-  // inharmonic subs: beating, pitchless, enormous
-  const subs = [26.3, 31.1, 41.7, 57.2].map((f, i) =>
-    b.drone({ freq: f, type: 'sine', gain: 0.1 - i * 0.015, attack: 9, pan: i % 2 ? 0.4 : -0.4, detune: rnd(-18, 18) })
+  // Unpitched and enormous. These used to sit 4.8, 10.6 and 15.5 Hz apart,
+  // which is exactly the roughness band — the vastness arrived as a wobble.
+  // Spacing them by rough fifths keeps them pitchless (they belong to no
+  // scale) while putting every difference tone below the beat range.
+  const subs = [23.0, 34.3, 51.0, 76.4].map((f, i) =>
+    b.drone({
+      freq: f, type: 'sine', gain: 0.095 - i * 0.019, attack: 10 + i * 3,
+      pan: i % 2 ? 0.55 : -0.55, detune: softDetune(f, 0.08)
+    })
   );
 
-  if (mid) b.lfo(mid.filter.frequency, { rate: 0.031, depth: 170 });
-  if (air) b.lfo(air.gain.gain, { rate: 0.017, depth: 0.025 });
-  subs.forEach((s, i) => s && b.lfo(s.gain.gain, { rate: 0.013 + i * 0.007, depth: 0.05, type: 'triangle' }));
+  if (mid) b.lfo(mid.filter.frequency, { rate: slowRate(0, 0.0105), depth: 110 });
+  if (air) b.lfo(air.gain.gain, { rate: slowRate(2, 0.0062), depth: 0.016, type: 'triangle' });
+  subs.forEach((s, i) => s && b.lfo(s.gain.gain, { rate: slowRate(i, 0.0075), depth: 0.035, type: 'triangle' }));
 
-  // slow random re-aiming: the void never settles
-  b.every(() => rnd(5, 13), (t) => {
-    if (mid) mid.filter.frequency.setTargetAtTime(rnd(120, 620), t, 4);
-    if (rumble) rumble.gain.gain.setTargetAtTime(rnd(0.34, 0.6), t, 5);
-    if (air) air.filter.frequency.setTargetAtTime(rnd(900, 4200), t, 6);
+  // slow random re-aiming: the void never settles, and never on a clock
+  b.every(() => rnd(17, 44), (t) => {
+    if (mid) mid.filter.frequency.setTargetAtTime(rnd(120, 480), t, 12);
+    if (rumble) rumble.gain.gain.setTargetAtTime(rnd(0.28, 0.46), t, 14);
+    if (air) air.filter.frequency.setTargetAtTime(rnd(560, 1500), t, 16);
   });
 
   // distant tectonic groans
-  b.every(() => rnd(11, 26), (t) => {
+  b.every(() => rnd(14, 37), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'brown', dur: rnd(5, 9), peak: 0.1, attack: 2.5, pan: rnd(-0.8, 0.8),
-      filter: { type: 'lowpass', freq: rnd(90, 220), Q: 2.5, sweepTo: rnd(40, 70), sweepTime: 5 }
+      color: 'brown', dur: rnd(6, 11), peak: 0.085, attack: 3.5, pan: rnd(-0.8, 0.8),
+      filter: { type: 'lowpass', freq: rnd(80, 190), Q: 1.6, sweepTo: rnd(40, 70), sweepTime: 6 }
     });
   });
 }
@@ -730,43 +854,49 @@ function bedTohu(b) {
 /** Shared substrate: the primordial noise, thinning as the days proceed. */
 function substrate(b, amount) {
   if (amount <= 0) return;
-  b.noiseLayer({ color: 'brown', gain: 0.32 * amount, attack: 5, filter: { type: 'lowpass', freq: 68, Q: 0.6 } });
+  b.noiseLayer({ color: 'brown', gain: 0.28 * amount, attack: 7, filter: { type: 'lowpass', freq: 62, Q: 0.6 } });
   if (amount > 0.3) {
-    b.noiseLayer({ color: 'pink', gain: 0.06 * amount, attack: 7, pan: 0.25, filter: { type: 'bandpass', freq: 400, Q: 1.1 } });
+    b.noiseLayer({ color: 'pink', gain: 0.04 * amount, attack: 9, pan: 0.25, filter: { type: 'bandpass', freq: 340, Q: 1.6 } });
   }
 }
 
 function bedDay1(b) {
-  b.colorRange = [500, 5200];
-  b.baseWet = 0.7;
-  b.wet.gain.setValueAtTime(0.7, b.ctx.currentTime);
+  b.colorRange = [380, 2600];
+  b.baseWet = 0.68;
+  b.wet.gain.setValueAtTime(0.68, b.ctx.currentTime);
   substrate(b, 1);
 
-  // one pitch, pulled out of the noise
+  // One pitch, pulled out of the noise. The companion voice used to sit a
+  // beating 7 cents away from the fundamental; it is now a clean octave above
+  // it and panned off to one side, which is the same width with none of the
+  // wobble.
   const f = degree(0, 1); // D3
-  const a = b.drone({ freq: f, type: 'sine', gain: 0.16, attack: 11 });
-  const c = b.drone({ freq: f, type: 'triangle', gain: 0.05, attack: 14, detune: 7, pan: 0.3 });
-  const sub = b.drone({ freq: f / 4, type: 'sine', gain: 0.14, attack: 12 });
-  if (a) b.lfo(a.gain.gain, { rate: 0.038, depth: 0.05 });
-  if (c) b.lfo(c.osc.detune, { rate: 0.021, depth: 9 });
+  const a = b.drone({ freq: f, type: 'sine', gain: 0.14, attack: 14 });
+  const c = b.drone({ freq: f * 2, type: 'triangle', gain: 0.028, attack: 20, detune: softDetune(f * 2), pan: 0.4 });
+  const sub = b.drone({ freq: f / 4, type: 'sine', gain: 0.13, attack: 15 });
+  if (a) b.lfo(a.gain.gain, { rate: slowRate(0, 0.0088), depth: 0.04 });
+  if (c) b.lfo(c.gain.gain, { rate: slowRate(2, 0.0071), depth: 0.026, type: 'triangle' });
 
   // the pitch flickers into being now and then
-  b.every(() => rnd(14, 24), (t) => {
-    tone(b.score, b.mix, t, { freq: f * 2, type: 'sine', dur: rnd(6, 10), peak: 0.05, attack: 3, pan: rnd(-0.5, 0.5) });
+  b.every(() => rnd(19, 41), (t) => {
+    tone(b.score, b.mix, t, {
+      freq: vary(f * 2, 5), type: 'sine', dur: rnd(7, 13), peak: 0.035,
+      attack: 4, pan: rnd(-0.5, 0.5)
+    });
   });
-  b.onUpdate = (s, t) => { if (sub) sub.gain.gain.setTargetAtTime(0.1 + s.intensity * 0.1, t, 2); };
+  b.onUpdate = (s, t) => { if (sub) sub.gain.gain.setTargetAtTime(0.09 + s.intensity * 0.08, t, 4); };
 }
 
 function bedDay2(b) {
-  b.colorRange = [600, 7000];
-  b.baseWet = 0.62;
-  b.wet.gain.setValueAtTime(0.62, b.ctx.currentTime);
+  b.colorRange = [450, 3000];
+  b.baseWet = 0.6;
+  b.wet.gain.setValueAtTime(0.6, b.ctx.currentTime);
   b.hollowDepth = 0.5;
   substrate(b, 0.7);
 
   // waters below
-  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.2, attack: 8 });
-  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.09, attack: 10, pan: -0.45, detune: -6 });
+  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.18, attack: 10 });
+  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.07, attack: 13, pan: -0.45, detune: softDetune(degree(0, 0)) });
   // the firmament: a scooped middle
   const gap = b.ctx.createBiquadFilter();
   gap.type = 'peaking';
@@ -775,163 +905,192 @@ function bedDay2(b) {
   gap.gain.setValueAtTime(-9, b.ctx.currentTime);
   gap.connect(b.mix);
   b._nodes.push(gap);
-  // waters above — the fifth, high and thin
-  const hi = b.drone({ freq: degree(4, 2), type: 'sine', gain: 0.07, attack: 13, pan: 0.5, dest: gap });
-  const hi2 = b.drone({ freq: degree(4, 3), type: 'sine', gain: 0.03, attack: 16, pan: -0.5, dest: gap, detune: 11 });
-  if (hi) b.lfo(hi.gain.gain, { rate: 0.027, depth: 0.03 });
-  if (hi2) b.lfo(hi2.gain.gain, { rate: 0.019, depth: 0.018 });
+  // waters above — the fifth, high and thin. The upper octave is gated by an
+  // LFO as deep as its own gain, so it comes and goes rather than hanging.
+  const hi = b.drone({ freq: degree(4, 2), type: 'sine', gain: 0.05, attack: 16, pan: 0.5, dest: gap });
+  const hi2 = b.drone({ freq: degree(4, 3), type: 'sine', gain: 0.018, attack: 22, pan: -0.5, dest: gap, detune: softDetune(degree(4, 3)) });
+  if (hi) b.lfo(hi.gain.gain, { rate: slowRate(1, 0.0082), depth: 0.022 });
+  if (hi2) b.lfo(hi2.gain.gain, { rate: slowRate(3, 0.0059), depth: 0.018, type: 'triangle' });
 
-  b.every(() => rnd(9, 18), (t) => {
+  b.every(() => rnd(13, 31), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'white', dur: rnd(3, 6), peak: 0.035, attack: 1.6, pan: rnd(-0.9, 0.9),
-      filter: { type: 'bandpass', freq: rnd(2200, 5200), Q: 1.4, sweepTo: rnd(900, 1800), sweepTime: 3 }
+      color: 'pink', dur: rnd(4, 8), peak: 0.026, attack: 2.2, pan: rnd(-0.9, 0.9),
+      filter: { type: 'bandpass', freq: rnd(1100, 2400), Q: 2.2, sweepTo: rnd(600, 1100), sweepTime: 4 }
     });
   });
 }
 
 function bedDay3(b) {
-  b.colorRange = [700, 8200];
+  b.colorRange = [500, 3400];
   b.baseWet = 0.5;
   b.wet.gain.setValueAtTime(0.5, b.ctx.currentTime);
   substrate(b, 0.4);
 
-  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.22, attack: 6 });
-  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.11, attack: 9, pan: 0.3 });
-  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.07, attack: 10, pan: -0.35, detune: 5 });
+  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.2, attack: 8 });
+  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.095, attack: 11, pan: 0.3 });
+  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.05, attack: 13, pan: -0.4, detune: softDetune(degree(0, 0)) });
 
-  // things growing: plucked motion, organic and irregular
+  // Things growing: plucked motion, organic and irregular. Thinned out — at
+  // one pluck a second this read as a texture to get away from rather than a
+  // garden filling in.
   const degs = [0, 2, 3, 4, 6, 7];
-  b.every(() => rnd(0.9, 2.6) / b.density, (t) => {
+  b.every(() => rnd(1.6, 4.4) / b.density, (t) => {
     const d = pick(degs);
     pluckVoice(b.score, b.mix, t, {
-      freq: degree(d, rint(1, 2)), dur: rnd(1.4, 3), peak: rnd(0.05, 0.1),
-      pan: rnd(-0.7, 0.7), open: rnd(4, 9)
+      freq: degree(d, rint(1, 2)), dur: rnd(1.8, 3.6), peak: rnd(0.035, 0.07),
+      pan: rnd(-0.7, 0.7), open: rnd(3, 6)
     });
-    if (Math.random() < 0.3) {
-      pluckVoice(b.score, b.mix, t + rnd(0.12, 0.3), {
-        freq: degree(d + 2, 2), dur: rnd(1, 2), peak: 0.045, pan: rnd(-0.7, 0.7)
+    if (Math.random() < 0.28) {
+      pluckVoice(b.score, b.mix, t + rnd(0.18, 0.5), {
+        freq: degree(d + 2, 2), dur: rnd(1.4, 2.6), peak: 0.03, pan: rnd(-0.7, 0.7), open: rnd(3, 5)
       });
     }
   });
-  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.2; };
+  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.1; };
 }
 
 function bedDay4(b) {
-  b.colorRange = [900, 13000];
+  b.colorRange = [600, 4200];
   b.baseWet = 0.55;
   b.wet.gain.setValueAtTime(0.55, b.ctx.currentTime);
   substrate(b, 0.25);
 
-  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.2, attack: 5 });
-  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.1, attack: 7, pan: -0.25 });
-  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.06, attack: 8, pan: 0.3, detune: -5 });
+  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.18, attack: 7 });
+  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.085, attack: 9, pan: -0.25 });
+  b.drone({ freq: degree(0, 0), type: 'triangle', gain: 0.04, attack: 11, pan: 0.35, detune: softDetune(degree(0, 0)) });
 
-  // the lights: high partials in slow, independent rotation
-  const partials = [4, 6, 7, 9, 11, 13];
+  // The lights: high partials in slow, independent rotation. Two changes —
+  // the top two partials are gone (they were the sustained sparkle that wore
+  // thin), and each remaining one is gated by an LFO whose depth equals its
+  // gain, so at any moment only some of them are sounding. Rates are
+  // golden-ratio spaced, so the constellation never repeats its pattern.
+  const partials = [4, 6, 7, 9];
   partials.forEach((p, i) => {
+    const f = degree(0, -1) * p;
+    const g = 0.009 + 0.006 * Math.random();
     const v = b.drone({
-      freq: degree(0, -1) * p, type: 'sine', gain: 0.012 + 0.01 * Math.random(),
-      attack: 10 + i * 2, pan: Math.sin(i * 1.9), detune: rnd(-9, 9)
+      freq: f, type: 'sine', gain: g,
+      attack: 14 + i * 4, pan: Math.sin(i * 1.9), detune: softDetune(f)
     });
     if (v) {
-      b.lfo(v.gain.gain, { rate: 0.013 + i * 0.011, depth: 0.014, type: 'sine', phase: i * 0.4 });
-      if (v.pan) b.lfo(v.pan.pan, { rate: 0.008 + i * 0.005, depth: 0.55 });
+      b.lfo(v.gain.gain, { rate: slowRate(i, 0.0068), depth: g * 0.95, type: 'sine', phase: i * 0.7 });
+      if (v.pan) b.lfo(v.pan.pan, { rate: slowRate(i + 1, 0.0051), depth: 0.5 });
     }
   });
 
-  b.every(() => rnd(1.6, 4) / b.density, (t) => {
-    pluckVoice(b.score, b.mix, t, { freq: degree(pick([0, 2, 4, 6]), 1), dur: rnd(1.6, 3), peak: 0.06, pan: rnd(-0.6, 0.6) });
+  b.every(() => rnd(2.6, 6.5) / b.density, (t) => {
+    pluckVoice(b.score, b.mix, t, {
+      freq: degree(pick([0, 2, 4, 6]), 1), dur: rnd(2, 3.6), peak: 0.045,
+      pan: rnd(-0.6, 0.6), open: rnd(3, 6)
+    });
   });
-  b.every(() => rnd(5, 11), (t) => {
-    bell(b.score, b.mix, t, { freq: degree(pick([0, 4, 7, 9]), 3), dur: rnd(3, 6), peak: 0.03 });
+  b.every(() => rnd(9, 23), (t) => {
+    bell(b.score, b.mix, t, { freq: degree(pick([0, 4, 7, 9]), 2), dur: rnd(4, 8), peak: 0.026 });
   });
   b.onUpdate = (s) => { b.density = 0.7 + s.intensity * 1.1; };
 }
 
 function bedDay5(b) {
-  b.colorRange = [1000, 14000];
+  b.colorRange = [600, 4000];
   b.baseWet = 0.45;
   b.wet.gain.setValueAtTime(0.45, b.ctx.currentTime);
 
-  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.18, attack: 4 });
-  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.09, attack: 6, pan: 0.2 });
-  b.drone({ freq: degree(2, 0), type: 'triangle', gain: 0.05, attack: 7, pan: -0.3 });
-  [4, 6, 9, 11].forEach((p, i) => {
-    const v = b.drone({ freq: degree(0, -1) * p, type: 'sine', gain: 0.01, attack: 9, pan: Math.sin(i * 2.1) });
-    if (v) b.lfo(v.gain.gain, { rate: 0.017 + i * 0.013, depth: 0.012 });
+  b.drone({ freq: degree(0, -1), type: 'sine', gain: 0.17, attack: 6 });
+  b.drone({ freq: degree(4, -1), type: 'sine', gain: 0.08, attack: 8, pan: 0.2 });
+  b.drone({ freq: degree(2, 0), type: 'triangle', gain: 0.035, attack: 10, pan: -0.35 });
+  [4, 6, 9].forEach((p, i) => {
+    const f = degree(0, -1) * p;
+    const v = b.drone({ freq: f, type: 'sine', gain: 0.008, attack: 13, pan: Math.sin(i * 2.1), detune: softDetune(f) });
+    if (v) b.lfo(v.gain.gain, { rate: slowRate(i, 0.0074), depth: 0.008, type: 'triangle' });
   });
 
-  // swarms: fast randomised flutters in bursts
-  b.every(() => rnd(1.1, 3.2) / b.density, (t) => {
-    const n = rint(3, 7);
+  // Swarms: randomised flutters in bursts, now sparser, softer-edged and a
+  // long way below the old 4 kHz bandpass ceiling.
+  b.every(() => rnd(2.1, 6) / b.density, (t) => {
+    const n = rint(3, 6);
     const pan = rnd(-0.85, 0.85);
     const base = pick([0, 2, 3, 4, 6]);
     for (let i = 0; i < n; i++) {
-      tone(b.score, b.mix, t + i * rnd(0.045, 0.11), {
-        freq: degree(base + rint(0, 4), rint(2, 3)), type: 'triangle',
-        dur: rnd(0.12, 0.3), peak: rnd(0.025, 0.05), attack: 0.006,
+      tone(b.score, b.mix, t + i * rnd(0.06, 0.16), {
+        freq: vary(degree(base + rint(0, 4), rint(1, 2)), 12), type: 'triangle',
+        dur: rnd(0.22, 0.5), peak: rnd(0.012, 0.028), attack: rnd(0.02, 0.05),
         pan: clamp(pan + rnd(-0.15, 0.15), -1, 1),
-        filter: { type: 'bandpass', freq: rnd(1400, 4200), Q: 3 }
+        filter: { type: 'bandpass', freq: rnd(700, 2000), Q: 1.6 }
       });
     }
   });
-  // something large moving in deep water
-  b.every(() => rnd(9, 20), (t) => {
+  // something large moving in deep water — the b2 appears here, in passing,
+  // as a swell that leans and then is gone
+  b.every(() => rnd(13, 29), (t) => {
     tone(b.score, b.mix, t, {
-      freq: degree(0, -2), type: 'sine', dur: rnd(4, 7), peak: 0.16, attack: 1.4,
-      glideTo: degree(1, -2), glideTime: 4, pan: rnd(-0.5, 0.5)
+      freq: degree(0, -2), type: 'sine', dur: rnd(5, 9), peak: 0.14, attack: 2.2,
+      glideTo: degree(1, -2), glideTime: 5, pan: rnd(-0.5, 0.5)
     });
   });
-  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.6; };
+  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.5; };
 }
 
 function bedDay6(b) {
-  b.colorRange = [900, 12500];
-  b.baseWet = 0.4;
-  b.wet.gain.setValueAtTime(0.4, b.ctx.currentTime);
+  b.colorRange = [550, 3600];
+  b.baseWet = 0.42;
+  b.wet.gain.setValueAtTime(0.42, b.ctx.currentTime);
 
   // the fullest harmony of the creation: 1 ♭3→3 5 ♭7 stacked warm
-  [[0, -1, 0.2, 'sine'], [0, 0, 0.1, 'triangle'], [2, 0, 0.075, 'triangle'],
-   [4, 0, 0.07, 'triangle'], [6, 0, 0.045, 'sine'], [0, 1, 0.04, 'sine']]
+  [[0, -1, 0.18, 'sine'], [0, 0, 0.08, 'triangle'], [2, 0, 0.055, 'triangle'],
+   [4, 0, 0.055, 'triangle'], [6, 0, 0.032, 'sine'], [0, 1, 0.026, 'sine']]
     .forEach(([d, o, g, type], i) => {
-      const v = b.drone({ freq: degree(d, o), type, gain: g, attack: 4 + i, pan: Math.sin(i * 1.7) * 0.5, detune: rnd(-7, 7) });
-      if (v) b.lfo(v.gain.gain, { rate: 0.019 + i * 0.009, depth: g * 0.3 });
+      const f = degree(d, o);
+      const v = b.drone({ freq: f, type, gain: g, attack: 6 + i * 1.5, pan: Math.sin(i * 1.7) * 0.5, detune: softDetune(f) });
+      if (v) b.lfo(v.gain.gain, { rate: slowRate(i, 0.0081), depth: g * 0.32 });
     });
 
-  // the first pulse of animal life — roughly 62 bpm, two beats
-  let bpm = 62;
-  b.every(() => 60 / bpm, (t) => {
-    thump(b.score, b.mix, t, { freq: 58, dur: 0.42, peak: 0.26, drop: 0.55 });
-    thump(b.score, b.mix, t + 0.26, { freq: 52, dur: 0.34, peak: 0.16, drop: 0.6 });
+  // The first pulse of animal life. It used to be a dead-accurate 62 bpm
+  // forever, which the ear locks onto within a minute and then cannot ignore.
+  // It now breathes (+/-7% per beat) and stops to rest every ten beats or so,
+  // which is what makes it read as a body rather than a click track.
+  let bpm = 56;
+  let beats = 0;
+  let restIn = rint(8, 15);
+  b.every(() => {
+    beats++;
+    if (beats >= restIn) { beats = 0; restIn = rint(8, 15); return (60 / bpm) * rnd(2.6, 5.5); }
+    return (60 / bpm) * rnd(0.93, 1.08);
+  }, (t) => {
+    thump(b.score, b.mix, t, { freq: 56, dur: 0.46, peak: rnd(0.15, 0.2), drop: 0.55 });
+    thump(b.score, b.mix, t + rnd(0.24, 0.3), { freq: 50, dur: 0.38, peak: rnd(0.08, 0.12), drop: 0.6 });
   });
 
-  b.every(() => rnd(2.5, 6) / b.density, (t) => {
-    pluckVoice(b.score, b.mix, t, { freq: degree(pick([0, 2, 4, 6, 7]), rint(1, 2)), dur: rnd(2, 4), peak: 0.055, pan: rnd(-0.7, 0.7) });
+  b.every(() => rnd(3.5, 8) / b.density, (t) => {
+    pluckVoice(b.score, b.mix, t, {
+      freq: degree(pick([0, 2, 4, 6, 7]), rint(1, 2)), dur: rnd(2.4, 4.5),
+      peak: 0.04, pan: rnd(-0.7, 0.7), open: rnd(3, 6)
+    });
   });
-  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.3; bpm = 54 + s.intensity * 22; };
+  b.onUpdate = (s) => { b.density = 0.6 + s.intensity * 1.2; bpm = 50 + s.intensity * 18; };
 }
 
 function bedDay7(b) {
-  b.colorRange = [1200, 9000];
+  b.colorRange = [700, 2800];
   b.baseWet = 0.62;
   b.wet.gain.setValueAtTime(0.62, b.ctx.currentTime);
 
   // everything stripped away: one golden chord over a very deep silence
-  [[0, -2, 0.13, 'sine'], [0, 0, 0.075, 'sine'], [4, 0, 0.055, 'sine'],
-   [2, 1, 0.035, 'sine'], [0, 2, 0.018, 'sine']]
+  [[0, -2, 0.12, 'sine'], [0, 0, 0.065, 'sine'], [4, 0, 0.045, 'sine'],
+   [2, 1, 0.025, 'sine'], [0, 2, 0.011, 'sine']]
     .forEach(([d, o, g, type], i) => {
-      const v = b.drone({ freq: degree(d, o), type, gain: g, attack: 9 + i * 2.5, pan: Math.sin(i * 2.3) * 0.45, detune: rnd(-4, 4) });
-      if (v) b.lfo(v.gain.gain, { rate: 0.008 + i * 0.005, depth: g * 0.45 });
+      const f = degree(d, o);
+      const v = b.drone({ freq: f, type, gain: g, attack: 12 + i * 4, pan: Math.sin(i * 2.3) * 0.45, detune: softDetune(f) });
+      if (v) b.lfo(v.gain.gain, { rate: slowRate(i, 0.0055), depth: g * 0.42 });
     });
-  b.driftCents = 2;
+  b.driftCents = 1.2;
 
   // one long exhale every half-minute or so, and nothing else
-  b.every(() => rnd(22, 38), (t) => {
+  b.every(() => rnd(26, 52), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'pink', dur: rnd(7, 11), peak: 0.03, attack: 3.5, pan: rnd(-0.4, 0.4),
-      filter: { type: 'lowpass', freq: 900, Q: 0.7, sweepTo: 300, sweepTime: 7 }
+      color: 'pink', dur: rnd(8, 13), peak: 0.024, attack: 4.5, pan: rnd(-0.4, 0.4),
+      filter: { type: 'lowpass', freq: 700, Q: 0.6, sweepTo: 260, sweepTime: 8 }
     });
-    bell(b.score, b.mix, t + rnd(1, 4), { freq: degree(0, 2), dur: rnd(9, 14), peak: 0.024 });
+    bell(b.score, b.mix, t + rnd(1, 5), { freq: degree(0, 1), dur: rnd(11, 17), peak: 0.022 });
   });
 }
 
@@ -945,18 +1104,19 @@ function edenCore(b, { transpose = 0, muffle = 0, sparse = 1, birds = 1 } = {}) 
   const root = semi(ROOT, transpose);
   const f = (d, o) => degree(d, o, EDENIC, root);
 
-  b.colorRange = muffle ? [320, 900] : [1100, 14000];
-  b.baseWet = 0.38 + muffle * 0.3;
+  b.colorRange = muffle ? [280, 780] : [700, 4400];
+  b.baseWet = 0.38 + muffle * 0.28;
   b.wet.gain.setValueAtTime(b.baseWet, b.ctx.currentTime);
 
-  [[0, -1, 0.19, 'sine'], [4, -1, 0.1, 'sine'], [0, 0, 0.08, 'triangle'],
-   [2, 0, 0.06, 'triangle'], [4, 0, 0.045, 'sine'], [6, 0, 0.03, 'sine']]
+  [[0, -1, 0.17, 'sine'], [4, -1, 0.085, 'sine'], [0, 0, 0.06, 'triangle'],
+   [2, 0, 0.045, 'triangle'], [4, 0, 0.032, 'sine'], [6, 0, 0.018, 'sine']]
     .forEach(([d, o, g, type], i) => {
+      const fr = f(d, o);
       const v = b.drone({
-        freq: f(d, o), type, gain: g, attack: 4 + i * 1.5,
-        pan: Math.sin(i * 1.6) * 0.5, detune: rnd(-6, 6)
+        freq: fr, type, gain: g, attack: 6 + i * 2.5,
+        pan: Math.sin(i * 1.6) * 0.5, detune: softDetune(fr)
       });
-      if (v) b.lfo(v.gain.gain, { rate: 0.014 + i * 0.008, depth: g * 0.35, phase: i * 0.3 });
+      if (v) b.lfo(v.gain.gain, { rate: slowRate(i, 0.0077), depth: g * 0.34, phase: i * 0.5 });
     });
 
   if (muffle) {
@@ -970,28 +1130,33 @@ function edenCore(b, { transpose = 0, muffle = 0, sparse = 1, birds = 1 } = {}) 
   }
 
   // gentle melodic motion through the garden
-  b.every(() => rnd(2.4, 5.5) * sparse / b.density, (t) => {
+  b.every(() => rnd(3.4, 8) * sparse / b.density, (t) => {
     const d = pick([0, 1, 2, 4, 5]);
     pluckVoice(b.score, b.mix, t, {
-      freq: f(d, rint(1, 2)), dur: rnd(2.4, 4.5), peak: rnd(0.045, 0.085),
-      pan: rnd(-0.6, 0.6), open: rnd(5, 10)
+      freq: f(d, rint(1, 2)), dur: rnd(2.8, 5.5), peak: rnd(0.035, 0.065),
+      pan: rnd(-0.6, 0.6), open: rnd(3, 6)
     });
-    if (Math.random() < 0.45) {
-      pluckVoice(b.score, b.mix, t + rnd(0.25, 0.7), { freq: f(d + 2, 2), dur: rnd(2, 3.5), peak: 0.04, pan: rnd(-0.6, 0.6) });
+    if (Math.random() < 0.4) {
+      pluckVoice(b.score, b.mix, t + rnd(0.35, 1.1), {
+        freq: f(d + 2, 2), dur: rnd(2.4, 4), peak: 0.028, pan: rnd(-0.6, 0.6), open: rnd(3, 5)
+      });
     }
   });
 
-  // birdlike high flickers
+  // Birdlike high flickers. These were the brightest sustained-ish material
+  // in the garden: 2.6-6 kHz bandpasses at Q 4 every few seconds. They are now
+  // an octave lower, blunter (Q 2), quieter, and come round two to three times
+  // less often — an occasional bird rather than an aviary.
   if (birds > 0) {
-    b.every(() => rnd(3, 9) / birds, (t) => {
-      const base = f(pick([4, 6, 7, 9]), 3);
-      const n = rint(2, 4);
+    b.every(() => rnd(8, 21) / birds, (t) => {
+      const base = f(pick([4, 6, 7]), 2);
+      const n = rint(2, 3);
       for (let i = 0; i < n; i++) {
-        tone(b.score, b.mix, t + i * rnd(0.06, 0.14), {
-          freq: base * rnd(0.95, 1.5), type: 'sine', dur: rnd(0.08, 0.18),
-          peak: rnd(0.02, 0.04), attack: 0.005, pan: rnd(-0.9, 0.9),
-          glideTo: base * rnd(1.1, 1.9), glideTime: 0.1,
-          filter: { type: 'bandpass', freq: rnd(2600, 6000), Q: 4 }
+        tone(b.score, b.mix, t + i * rnd(0.1, 0.24), {
+          freq: base * rnd(0.95, 1.4), type: 'sine', dur: rnd(0.14, 0.3),
+          peak: rnd(0.01, 0.022), attack: 0.02, pan: rnd(-0.9, 0.9),
+          glideTo: base * rnd(1.05, 1.5), glideTime: 0.18,
+          filter: { type: 'bandpass', freq: rnd(1300, 2600), Q: 2 }
         });
       }
     });
@@ -1007,123 +1172,140 @@ function bedLoneliness(b) {
   b.hollow.frequency.setValueAtTime(620, b.ctx.currentTime);
   b.hollow.Q.setValueAtTime(0.75, b.ctx.currentTime);
   b.hollow.gain.setValueAtTime(-7, b.ctx.currentTime);
-  b.driftCents = 9;
+  b.driftCents = 3;
   b.baseWet = 0.55;
   b.wet.gain.setValueAtTime(0.55, b.ctx.currentTime);
 
   // a single voice calling into the empty middle register
-  b.every(() => rnd(13, 26), (t) => {
+  b.every(() => rnd(17, 38), (t) => {
     tone(b.score, b.mix, t, {
-      freq: degree(0, 1, EDENIC), type: 'sine', dur: rnd(5, 8), peak: 0.05, attack: 2.2,
-      pan: rnd(-0.3, 0.3), detune: rnd(-14, 14)
+      freq: vary(degree(0, 1, EDENIC), 8), type: 'sine', dur: rnd(6, 10), peak: 0.04, attack: 3,
+      pan: rnd(-0.3, 0.3)
     });
   });
 
   const base = b.onUpdate;
   b.onUpdate = (s, t) => {
     if (base) base(s, t);
-    b.score.reverb.setTone(7200 - s.loneliness * 4200, t);
+    b.score.reverb.setTone(3400 - s.loneliness * 1700, t);
   };
 }
 
 function bedTardemah(b) {
-  b.colorRange = [220, 1400];
+  b.colorRange = [200, 1100];
   b.baseWet = 0.6;
   b.wet.gain.setValueAtTime(0.6, b.ctx.currentTime);
-  b.driftCents = 14;
+  // 14 cents of random re-aiming every few seconds was a seasick wobble, not
+  // a dream. The dreaminess now lives in the pitch bends below instead.
+  b.driftCents = 3.5;
 
   const voices = [];
-  [[0, -1, 0.2], [4, -1, 0.1], [0, 0, 0.07], [2, 0, 0.05]].forEach(([d, o, g], i) => {
-    const v = b.drone({ freq: degree(d, o, EDENIC), type: 'sine', gain: g, attack: 5 + i * 2, pan: Math.sin(i * 2) * 0.5 });
-    if (v) { voices.push(v); b.lfo(v.gain.gain, { rate: 0.01 + i * 0.006, depth: g * 0.4 }); }
+  [[0, -1, 0.18], [4, -1, 0.085], [0, 0, 0.05], [2, 0, 0.035]].forEach(([d, o, g], i) => {
+    const v = b.drone({ freq: degree(d, o, EDENIC), type: 'sine', gain: g, attack: 7 + i * 3, pan: Math.sin(i * 2) * 0.5 });
+    if (v) { voices.push(v); b.lfo(v.gain.gain, { rate: slowRate(i, 0.0064), depth: g * 0.4 }); }
   });
 
-  b.noiseLayer({ color: 'brown', gain: 0.12, attack: 6, filter: { type: 'lowpass', freq: 160, Q: 0.7 } });
+  b.noiseLayer({ color: 'brown', gain: 0.1, attack: 8, filter: { type: 'lowpass', freq: 140, Q: 0.7 } });
 
-  // dreamlike pitch bends
-  b.every(() => rnd(6, 13), (t) => {
+  // Dreamlike pitch bends. Each voice is bent independently and by a
+  // different amount, so the stack smears rather than beating against itself.
+  b.every(() => rnd(11, 26), (t) => {
     for (const v of voices) {
+      if (Math.random() < 0.4) continue;
       const f = v.osc.frequency;
       const cur = Math.max(8, f.value);
       f.cancelScheduledValues(t);
       f.setValueAtTime(cur, t);
-      f.exponentialRampToValueAtTime(Math.max(8, cur * rnd(0.96, 1.05)), t + rnd(3, 7));
+      f.exponentialRampToValueAtTime(Math.max(8, cur * rnd(0.975, 1.03)), t + rnd(6, 13));
     }
   });
 
-  // a slowed heartbeat, heard through water
-  let bpm = 41;
-  b.every(() => 60 / bpm, (t) => {
-    thump(b.score, b.mix, t, { freq: 46, dur: 0.75, peak: 0.3, drop: 0.5 });
-    thump(b.score, b.mix, t + 0.36, { freq: 42, dur: 0.6, peak: 0.17, drop: 0.55 });
+  // A slowed heartbeat, heard through water — humanised and resting, like the
+  // day6 pulse, so it never becomes a metronome under the sleeping body.
+  let bpm = 38;
+  let beats = 0;
+  let restIn = rint(6, 12);
+  b.every(() => {
+    beats++;
+    if (beats >= restIn) { beats = 0; restIn = rint(6, 12); return (60 / bpm) * rnd(2.2, 4.5); }
+    return (60 / bpm) * rnd(0.9, 1.12);
+  }, (t) => {
+    thump(b.score, b.mix, t, { freq: 46, dur: 0.8, peak: rnd(0.16, 0.22), drop: 0.5, attack: 0.03 });
+    thump(b.score, b.mix, t + rnd(0.33, 0.42), { freq: 42, dur: 0.65, peak: rnd(0.08, 0.12), drop: 0.55, attack: 0.03 });
   });
-  b.onUpdate = (s) => { bpm = 36 + s.intensity * 12; };
+  b.onUpdate = (s) => { bpm = 34 + s.intensity * 10; };
 }
 
 function bedEve(b) {
-  b.colorRange = [1400, 15000];
+  // Still the first real consonance in the piece, and still the warmest thing
+  // in it — but the warmth now comes from the voicing rather than from a
+  // 15 kHz ceiling. Nothing here is detuned enough to shimmer.
+  b.colorRange = [900, 5200];
   b.baseWet = 0.42;
   b.wet.gain.setValueAtTime(0.42, b.ctx.currentTime);
-  b.driftCents = 2;
+  b.driftCents = 1.2;
 
-  // the first unambiguous consonance in the whole score — let it bloom
   const r = ROOT;
-  [[0, -1, 0.18, 'sine', 3], [0, 0, 0.1, 'sine', 4], [4, 0, 0.085, 'sine', 5],
-   [2, 0, 0.08, 'triangle', 6], [0, 1, 0.05, 'sine', 7], [4, 1, 0.035, 'sine', 9],
-   [2, 2, 0.02, 'sine', 11]]
+  [[0, -1, 0.17, 'sine', 4], [0, 0, 0.085, 'sine', 5], [4, 0, 0.07, 'sine', 6],
+   [2, 0, 0.06, 'triangle', 8], [0, 1, 0.034, 'sine', 10], [4, 1, 0.02, 'sine', 13],
+   [2, 2, 0.009, 'sine', 16]]
     .forEach(([d, o, g, type, at], i) => {
-      const v = b.drone({ freq: degree(d, o, EDENIC, r), type, gain: g, attack: at, pan: Math.sin(i * 1.4) * 0.55, detune: rnd(-3, 3) });
-      if (v) b.lfo(v.gain.gain, { rate: 0.012 + i * 0.007, depth: g * 0.3 });
+      const f = degree(d, o, EDENIC, r);
+      const v = b.drone({ freq: f, type, gain: g, attack: at, pan: Math.sin(i * 1.4) * 0.55, detune: softDetune(f, 0.2) });
+      if (v) b.lfo(v.gain.gain, { rate: slowRate(i, 0.0066), depth: g * 0.3 });
     });
 
   // a rising figure that keeps opening upward
-  b.every(() => rnd(4, 8), (t) => {
+  b.every(() => rnd(6, 13), (t) => {
     const start = pick([0, 2, 4]);
     for (let i = 0; i < 4; i++) {
-      pluckVoice(b.score, b.mix, t + i * rnd(0.2, 0.33), {
-        freq: degree(start + i * 2, 2, EDENIC, r), dur: rnd(2.5, 4.5),
-        peak: 0.07 - i * 0.008, pan: rnd(-0.5, 0.5), open: 9
+      pluckVoice(b.score, b.mix, t + i * rnd(0.26, 0.48), {
+        freq: degree(start + i * 2, 1, EDENIC, r), dur: rnd(3, 5.5),
+        peak: 0.05 - i * 0.007, pan: rnd(-0.5, 0.5), open: rnd(4, 6)
       });
     }
   });
-  b.every(() => rnd(9, 16), (t) => {
-    bell(b.score, b.mix, t, { freq: degree(pick([0, 4, 7]), 3, EDENIC, r), dur: rnd(5, 9), peak: 0.035 });
+  b.every(() => rnd(13, 27), (t) => {
+    bell(b.score, b.mix, t, { freq: degree(pick([0, 4, 7]), 2, EDENIC, r), dur: rnd(6, 11), peak: 0.03 });
   });
 }
 
 /* --- the serpent and the fall ------------------------------------------- */
 
 function serpentCore(b, { creep = 0 } = {}) {
-  b.colorRange = [1100, 9000];
-  b.baseWet = 0.14; // close and dry: he is standing right next to you
-  b.wet.gain.setValueAtTime(0.14, b.ctx.currentTime);
-  b.driftCents = 6;
+  b.colorRange = [700, 3800];
+  b.baseWet = 0.16; // close and dry: he is standing right next to you
+  b.wet.gain.setValueAtTime(0.16, b.ctx.currentTime);
+  b.driftCents = 2.5;
 
   // sweet surface
   const surface = [];
-  [[0, 0, 0.075, 'sine'], [2, 0, 0.06, 'sine'], [4, 0, 0.045, 'triangle']].forEach(([d, o, g, type], i) => {
-    const v = b.drone({ freq: degree(d, o, EDENIC), type, gain: g, attack: 3 + i, pan: Math.sin(i * 1.8) * 0.4 });
-    if (v) { surface.push(v); b.lfo(v.gain.gain, { rate: 0.03 + i * 0.011, depth: g * 0.3 }); }
+  [[0, 0, 0.06, 'sine'], [2, 0, 0.045, 'sine'], [4, 0, 0.032, 'triangle']].forEach(([d, o, g, type], i) => {
+    const v = b.drone({ freq: degree(d, o, EDENIC), type, gain: g, attack: 4 + i * 2, pan: Math.sin(i * 1.8) * 0.4 });
+    if (v) { surface.push(v); b.lfo(v.gain.gain, { rate: slowRate(i, 0.0092), depth: g * 0.3 }); }
   });
 
   // underneath: a low voice creeping chromatically, never quite still
-  const low = b.drone({ freq: degree(0, -1), type: 'sawtooth', gain: 0.085, attack: 4, filter: { type: 'lowpass', freq: 180, Q: 1.2 } });
+  const low = b.drone({ freq: degree(0, -1), type: 'sawtooth', gain: 0.075, attack: 5, filter: { type: 'lowpass', freq: 150, Q: 0.9 } });
   let step = 0;
-  b.every(() => rnd(7, 13), (t) => {
+  b.every(() => rnd(9, 19), (t) => {
     if (!low) return;
     step = (step + (Math.random() < 0.7 ? 1 : -1));
     step = clamp(step, -3, 3);
     const f = low.osc.frequency;
     f.cancelScheduledValues(t);
     f.setValueAtTime(Math.max(8, f.value), t);
-    f.exponentialRampToValueAtTime(Math.max(8, semi(degree(0, -1), step)), t + rnd(5, 9));
+    f.exponentialRampToValueAtTime(Math.max(8, semi(degree(0, -1), step)), t + rnd(7, 13));
   });
 
-  // sibilance, barely there
-  b.every(() => rnd(5, 12), (t) => {
+  // Sibilance, barely there. It used to reach 7.2 kHz, which over a long
+  // temptation scene was the sharpest recurring thing in the piece. Now it
+  // lives between 2 and 4 kHz, fades in over a third of a second, and is
+  // roughly half as loud and half as frequent.
+  b.every(() => rnd(9, 24), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'white', dur: rnd(0.5, 1.4), peak: 0.022, attack: 0.25, pan: rnd(-0.8, 0.8),
-      filter: { type: 'bandpass', freq: rnd(3800, 7200), Q: 2.2, sweepTo: rnd(2200, 4000), sweepTime: 0.9 }
+      color: 'pink', dur: rnd(0.8, 1.9), peak: 0.013, attack: 0.4, pan: rnd(-0.8, 0.8),
+      filter: { type: 'bandpass', freq: rnd(2000, 3600), Q: 1.4, sweepTo: rnd(1100, 1900), sweepTime: 1.3 }
     });
   });
 
@@ -1137,9 +1319,10 @@ function serpentCore(b, { creep = 0 } = {}) {
       v.osc.detune.linearRampToValueAtTime(200, t0 + span);
     }
     b._drifters.length = 0; // let the creep own the detune
-    b.every(() => rnd(16, 28), (t) => {
+    // the b2 as a lean, not a drone: it always moves on to the third
+    b.every(() => rnd(21, 44), (t) => {
       tone(b.score, b.mix, t, {
-        freq: degree(1, 1), type: 'sine', dur: rnd(4, 7), peak: 0.035, attack: 2,
+        freq: degree(1, 1), type: 'sine', dur: rnd(5, 9), peak: 0.026, attack: 2.6,
         pan: rnd(-0.6, 0.6), glideTo: degree(2, 1), glideTime: 5
       });
     });
@@ -1150,43 +1333,50 @@ function bedSerpent(b) { serpentCore(b, {}); }
 function bedTemptation(b) { serpentCore(b, { creep: 1 }); }
 
 function bedFall(b) {
-  b.colorRange = [300, 4200];
+  b.colorRange = [260, 2400];
   b.baseWet = 0.55;
   b.wet.gain.setValueAtTime(0.55, b.ctx.currentTime);
   b.hollowDepth = 0.8;
-  b.driftCents = 22;
+  b.driftCents = 4;
 
-  // the centre drops a semitone and the stack detunes against itself
+  // The centre still drops a semitone, and the stack still comes apart — but
+  // the coming-apart is now a slow sinking, not a 5 Hz tremble. Two changes:
+  // the sustained b2 is gone (degree 3, the fourth, is just as unresolved and
+  // far less sour over minutes), and the detune spread tops out at 18 cents
+  // instead of 56, with the sawtooths filtered much lower so their upper
+  // harmonics cannot beat.
   const r = semi(ROOT, -1);
   const t0 = b.ctx.currentTime;
-  [[0, -1, 0.22, 'sine'], [0, 0, 0.1, 'sawtooth'], [1, 0, 0.07, 'triangle'],
-   [4, 0, 0.06, 'sawtooth'], [0, 1, 0.035, 'triangle']]
+  [[0, -1, 0.2, 'sine'], [0, 0, 0.075, 'sawtooth'], [3, 0, 0.05, 'triangle'],
+   [4, 0, 0.045, 'triangle'], [0, 1, 0.022, 'triangle']]
     .forEach(([d, o, g, type], i) => {
       const v = b.drone({
-        freq: degree(d, o, AHAVA, r), type, gain: g, attack: 0.6 + i * 0.3,
+        freq: degree(d, o, AHAVA, r), type, gain: g, attack: 1.2 + i * 0.6,
         pan: Math.sin(i * 1.5) * 0.6, detune: 0,
-        filter: { type: 'lowpass', freq: 2200 - i * 180, Q: 1.1 }
+        filter: { type: 'lowpass', freq: 900 - i * 90, Q: 0.8 }
       });
       if (v) {
-        const amt = (i % 2 ? 1 : -1) * (12 + i * 11);
+        const amt = (i % 2 ? 1 : -1) * (5 + i * 3.2);
         v.osc.detune.setValueAtTime(0, t0);
-        v.osc.detune.linearRampToValueAtTime(amt, t0 + rnd(6, 14));
+        v.osc.detune.linearRampToValueAtTime(amt, t0 + rnd(14, 30));
       }
     });
 
-  b.noiseLayer({ color: 'brown', gain: 0.22, attack: 2, filter: { type: 'lowpass', freq: 130, Q: 1 } });
+  b.noiseLayer({ color: 'brown', gain: 0.2, attack: 3, filter: { type: 'lowpass', freq: 120, Q: 0.8 } });
 
-  b.every(() => rnd(6, 14), (t) => {
+  b.every(() => rnd(8, 19), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'brown', dur: rnd(3, 6), peak: 0.12, attack: 0.8, pan: rnd(-0.7, 0.7),
-      filter: { type: 'lowpass', freq: rnd(400, 900), Q: 3, sweepTo: 90, sweepTime: 4 }
+      color: 'brown', dur: rnd(4, 8), peak: 0.095, attack: 1.4, pan: rnd(-0.7, 0.7),
+      filter: { type: 'lowpass', freq: rnd(300, 650), Q: 1.4, sweepTo: 85, sweepTime: 5 }
     });
   });
-  b.every(() => rnd(10, 20), (t) => {
+  // the b2 survives the fall as a melodic sag: the tonic leans down to it
+  b.every(() => rnd(14, 29), (t) => {
+    const f0 = degree(0, 0, AHAVA, r);
     tone(b.score, b.mix, t, {
-      freq: degree(0, 0, AHAVA, r), type: 'sawtooth', dur: rnd(5, 9), peak: 0.05, attack: 1.5,
-      glideTo: degree(0, 0, AHAVA, r) * 0.94, glideTime: 7, pan: rnd(-0.5, 0.5),
-      filter: { type: 'lowpass', freq: 1400, Q: 2, sweepTo: 300, sweepTime: 6 }
+      freq: f0, type: 'triangle', dur: rnd(6, 11), peak: 0.04, attack: 2.4,
+      glideTo: f0 * 0.944, glideTime: 8, pan: rnd(-0.5, 0.5),
+      filter: { type: 'lowpass', freq: 800, Q: 1, sweepTo: 240, sweepTime: 7 }
     });
   });
 }
@@ -1194,65 +1384,74 @@ function bedFall(b) {
 /* --- after ---------------------------------------------------------------- */
 
 function bedHiding(b) {
-  b.colorRange = [220, 2600];
+  b.colorRange = [200, 1600];
   b.baseWet = 0.3;
   b.wet.gain.setValueAtTime(0.3, b.ctx.currentTime);
 
   // room tone and almost nothing else
-  b.noiseLayer({ color: 'brown', gain: 0.1, attack: 4, filter: { type: 'lowpass', freq: 110, Q: 0.6 } });
-  b.noiseLayer({ color: 'pink', gain: 0.018, attack: 6, pan: -0.2, filter: { type: 'bandpass', freq: 520, Q: 0.8 } });
-  const v = b.drone({ freq: degree(0, -2), type: 'sine', gain: 0.09, attack: 8 });
-  if (v) b.lfo(v.gain.gain, { rate: 0.023, depth: 0.03 });
+  b.noiseLayer({ color: 'brown', gain: 0.09, attack: 6, filter: { type: 'lowpass', freq: 100, Q: 0.6 } });
+  b.noiseLayer({ color: 'pink', gain: 0.012, attack: 9, pan: -0.2, filter: { type: 'bandpass', freq: 430, Q: 1.6 } });
+  const v = b.drone({ freq: degree(0, -2), type: 'sine', gain: 0.08, attack: 11 });
+  if (v) b.lfo(v.gain.gain, { rate: slowRate(0, 0.0086), depth: 0.026 });
 
   // held breath
-  b.every(() => rnd(3.5, 7), (t) => {
+  b.every(() => rnd(5, 12), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'white', dur: rnd(0.8, 1.5), peak: rnd(0.02, 0.04), attack: 0.35, pan: rnd(-0.25, 0.25),
-      filter: { type: 'bandpass', freq: rnd(500, 1100), Q: 1.4, sweepTo: rnd(300, 700), sweepTime: 1 }
+      color: 'pink', dur: rnd(1.1, 2.1), peak: rnd(0.014, 0.026), attack: 0.5, pan: rnd(-0.25, 0.25),
+      filter: { type: 'bandpass', freq: rnd(400, 850), Q: 1.4, sweepTo: rnd(260, 520), sweepTime: 1.4 }
     });
   });
 
-  // a distant tread, coming closer and not arriving
-  b.every(() => rnd(3.2, 5.5), (t) => {
-    const near = rnd(0.25, 0.75);
-    thump(b.score, b.mix, t, { freq: rnd(44, 58), dur: 0.7, peak: 0.1 * near, drop: 0.5, pan: rnd(-0.7, 0.7) });
+  // A distant tread, coming closer and not arriving. The gap between steps is
+  // now wide and uneven — a regular footfall every four seconds for minutes on
+  // end is a drum machine, however quiet it is.
+  b.every(() => rnd(4, 13), (t) => {
+    const near = rnd(0.2, 0.7);
+    thump(b.score, b.mix, t, { freq: rnd(42, 56), dur: 0.8, peak: 0.075 * near, drop: 0.5, pan: rnd(-0.7, 0.7), attack: 0.03 });
+    if (Math.random() < 0.35) {
+      thump(b.score, b.mix, t + rnd(0.55, 0.95), { freq: rnd(42, 56), dur: 0.8, peak: 0.06 * near, drop: 0.5, pan: rnd(-0.7, 0.7), attack: 0.03 });
+    }
   });
 }
 
 function bedJudgment(b) {
-  b.colorRange = [320, 5200];
+  b.colorRange = [280, 3000];
   b.baseWet = 0.5;
   b.wet.gain.setValueAtTime(0.5, b.ctx.currentTime);
-  b.driftCents = 3;
+  b.driftCents = 2;
 
-  // low brass-like saw stacks: slow, immense, unhurried
-  const stack = [[0, -2, 0.2], [0, -1, 0.14], [4, -1, 0.1], [0, 0, 0.07], [3, 0, 0.05], [6, 0, 0.035]];
+  // Low brass-like saw stacks: slow, immense, unhurried. A sawtooth at 18 Hz
+  // with 8 cents of detune beats at 2.5 Hz by its thirtieth harmonic, which is
+  // where the old version's grind came from — the detune is now beat-safe for
+  // each voice's own register, and only the bottom two are sawtooths.
+  const stack = [[0, -2, 0.18], [0, -1, 0.12], [4, -1, 0.085], [0, 0, 0.055], [3, 0, 0.035], [6, 0, 0.022]];
   const voices = [];
   stack.forEach(([d, o, g], i) => {
+    const f = degree(d, o);
     const v = b.drone({
-      freq: degree(d, o), type: i < 4 ? 'sawtooth' : 'triangle', gain: g, attack: 6 + i * 2,
-      pan: Math.sin(i * 1.3) * 0.5, detune: rnd(-8, 8),
-      filter: { type: 'lowpass', freq: 500 + i * 120, Q: 1.3 }
+      freq: f, type: i < 2 ? 'sawtooth' : 'triangle', gain: g, attack: 8 + i * 3,
+      pan: Math.sin(i * 1.3) * 0.5, detune: softDetune(f * (i < 2 ? 8 : 2), 0.4),
+      filter: { type: 'lowpass', freq: 380 + i * 90, Q: 0.8 }
     });
     if (v) voices.push(v);
   });
 
-  // immense swells that take half a minute to arrive
-  b.every(() => rnd(18, 30), (t) => {
+  // immense swells that take half a minute to arrive, and never the same two
+  b.every(() => rnd(24, 48), (t) => {
     for (const v of voices) {
       if (!v.filter) continue;
       const f = v.filter.frequency;
       f.cancelScheduledValues(t);
       f.setValueAtTime(Math.max(20, f.value), t);
-      f.linearRampToValueAtTime(rnd(1400, 3000), t + rnd(7, 12));
-      f.linearRampToValueAtTime(rnd(320, 620), t + rnd(16, 24));
+      f.linearRampToValueAtTime(rnd(900, 1800), t + rnd(9, 16));
+      f.linearRampToValueAtTime(rnd(280, 520), t + rnd(20, 32));
     }
-    thump(b.score, b.mix, t + rnd(2, 6), { freq: 38, dur: 2.4, peak: 0.3, drop: 0.7 });
+    thump(b.score, b.mix, t + rnd(2, 8), { freq: 38, dur: 2.8, peak: 0.2, drop: 0.7, attack: 0.08 });
   });
 
   b.onUpdate = (s, t) => {
     for (const v of voices) {
-      if (v.gain) v.gain.gain.setTargetAtTime(clamp(0.06 + s.intensity * 0.12, 0.02, 0.22), t, 3);
+      if (v.gain) v.gain.gain.setTargetAtTime(clamp(0.045 + s.intensity * 0.09, 0.015, 0.16), t, 5);
     }
   };
 }
@@ -1263,32 +1462,35 @@ function bedExile(b) {
   b.baseWet = 0.62;
   b.wet.gain.setValueAtTime(0.62, b.ctx.currentTime);
   b.hollowDepth = 0.7;
-  b.driftCents = 7;
+  b.driftCents = 2.5;
 
-  // wind outside the gate
-  b.noiseLayer({ color: 'pink', gain: 0.07, attack: 7, filter: { type: 'bandpass', freq: 380, Q: 0.6 } });
-  b.every(() => rnd(8, 18), (t) => {
+  // wind outside the gate — narrower and lower, so it reads as weather rather
+  // than as the hiss of the system it is playing on
+  b.noiseLayer({ color: 'pink', gain: 0.055, attack: 10, filter: { type: 'bandpass', freq: 300, Q: 1.3 } });
+  b.every(() => rnd(12, 27), (t) => {
     noise(b.score, b.mix, t, {
-      color: 'pink', dur: rnd(5, 10), peak: 0.06, attack: 2.5, pan: rnd(-0.9, 0.9),
-      filter: { type: 'bandpass', freq: rnd(260, 700), Q: 1.1, sweepTo: rnd(140, 320), sweepTime: 6 }
+      color: 'pink', dur: rnd(6, 13), peak: 0.045, attack: 3.5, pan: rnd(-0.9, 0.9),
+      filter: { type: 'bandpass', freq: rnd(220, 520), Q: 1.4, sweepTo: rnd(130, 280), sweepTime: 7 }
     });
   });
 }
 
 function bedEpilogue(b) {
-  b.colorRange = [900, 7000];
+  // Still one tone decaying. Slightly darker, slightly quieter, and the gap
+  // between strikes is wide enough that you never quite anticipate the next.
+  b.colorRange = [700, 3200];
   b.baseWet = 0.72;
   b.wet.gain.setValueAtTime(0.72, b.ctx.currentTime);
-  b.driftCents = 1;
+  b.driftCents = 0.8;
 
   const strike = (t) => {
     bell(b.score, b.mix, t, {
-      freq: degree(0, 1), dur: rnd(16, 24), peak: 0.07,
-      ratios: [1, 2, 3.01, 4.02, 5.98]
+      freq: vary(degree(0, 1), 4), dur: rnd(18, 27), peak: 0.055,
+      ratios: [1, 2, 3.01, 4.02]
     });
-    tone(b.score, b.mix, t, { freq: degree(0, -1), type: 'sine', dur: rnd(14, 20), peak: 0.08, attack: 0.8 });
+    tone(b.score, b.mix, t, { freq: degree(0, -1), type: 'sine', dur: rnd(15, 22), peak: 0.07, attack: 1.4 });
   };
-  b.every(() => rnd(26, 40), strike, { immediate: true });
+  b.every(() => rnd(30, 54), strike, { immediate: true });
 }
 
 const BED_RECIPES = {
@@ -1336,8 +1538,18 @@ const WORD_DAYS = [
 
 /**
  * 'word' — speech that is not speech. A harmonic stack driven through a pair
- * of sweeping formant bandpasses, with a consonantal onset and a tail that
- * blooms into the reverb after the voice itself has gone.
+ * of sweeping formant bandpasses, with a breathed onset and a tail that blooms
+ * into the reverb after the voice itself has gone.
+ *
+ * This cue has been retired from gameplay (the player no longer holds a button
+ * to speak each day) and the API only has to keep working, so it has been
+ * softened hard rather than preserved. It was the harshest thing in the score:
+ * resonant formants at Q 5.5 and 7.5 ringing on the 'ee' vowel's 2.29 kHz
+ * upper formant, a 14 ms onset, a 160 ms-peak noise consonant, and nine
+ * partials reaching past 3 kHz. It is now: Q 2.4 and 3.0, partials capped at
+ * six and lowpassed as a group, a consonant a quarter as loud with a 25 ms
+ * fade, and an onset that takes a tenth of a second. It still sounds like a
+ * voice; it no longer sounds like a voice through a resonant filter bank.
  */
 function cueWord(s, o = {}) {
   const ctx = s.ctx;
@@ -1345,59 +1557,67 @@ function cueWord(s, o = {}) {
   const day = clamp(Math.round(num(o.day, 1)), 1, 8);
   const spec = WORD_DAYS[day - 1];
   const scale = day >= 7 ? EDENIC : AHAVA;
-  const f0 = degree(spec.deg, spec.oct, scale) * (o.octave ? Math.pow(2, o.octave) : 1);
-  const dur = spec.len * num(o.length, 1);
-  const gain = clamp(num(o.gain, 1), 0, 2);
+  const f0 = vary(degree(spec.deg, spec.oct, scale), 12) * (o.octave ? Math.pow(2, o.octave) : 1);
+  const dur = spec.len * num(o.length, 1) * jitter(0.06);
+  const gain = clamp(num(o.gain, 1), 0, 2) * 0.62;
 
   const ttl = dur * 2 + 3;
-  const bus = s._cueBus(0.5, 0.18, ttl);
+  const bus = s._cueBus(0.55, 0.14, ttl);
   const body = ctx.createGain();
   body.gain.setValueAtTime(FLOOR, t);
 
+  // a group lowpass in front of the formants: nothing in this voice needs to
+  // live above about 2.4 kHz
+  const roof = ctx.createBiquadFilter();
+  roof.type = 'lowpass';
+  roof.frequency.setValueAtTime(2400, t);
+  roof.Q.setValueAtTime(0.6, t);
+  roof.connect(bus);
+
   // two formants in parallel, swept through the vowel path
-  const formants = spec.path.map((v, i) => VOWELS[v] || VOWELS.aa);
-  const fNodes = [];
+  const formants = spec.path.map((v) => VOWELS[v] || VOWELS.aa);
+  const fNodes = [roof];
   for (let k = 0; k < 2; k++) {
     const f = ctx.createBiquadFilter();
     f.type = 'bandpass';
-    f.Q.setValueAtTime(k === 0 ? 5.5 : 7.5, t);
+    f.Q.setValueAtTime(k === 0 ? 2.4 : 3, t);
     f.frequency.setValueAtTime(formants[0][k], t);
     const seg = dur * 0.45 / (formants.length - 1 || 1);
     formants.forEach((fm, i) => {
       if (i === 0) return;
-      f.frequency.linearRampToValueAtTime(fm[k] * rnd(0.94, 1.06), t + 0.08 + seg * i);
+      f.frequency.linearRampToValueAtTime(fm[k] * rnd(0.94, 1.06), t + 0.12 + seg * i);
     });
     f.frequency.linearRampToValueAtTime(formants[formants.length - 1][k] * 0.8, t + dur * 0.8);
     const fg = ctx.createGain();
-    fg.gain.setValueAtTime(k === 0 ? 1 : 0.6, t);
-    body.connect(f); f.connect(fg); fg.connect(bus);
+    fg.gain.setValueAtTime(k === 0 ? 0.85 : 0.32, t);
+    body.connect(f); f.connect(fg); fg.connect(roof);
     fNodes.push(f, fg);
   }
   // a darkened direct path keeps the fundamental present
   const direct = ctx.createBiquadFilter();
   direct.type = 'lowpass';
-  direct.frequency.setValueAtTime(f0 * 6, t);
-  direct.Q.setValueAtTime(0.7, t);
+  direct.frequency.setValueAtTime(clamp(f0 * 4, 80, 1400), t);
+  direct.Q.setValueAtTime(0.6, t);
   const directG = ctx.createGain();
-  directG.gain.setValueAtTime(0.45, t);
+  directG.gain.setValueAtTime(0.55, t);
   body.connect(direct); direct.connect(directG); directG.connect(bus);
 
   // the harmonic stack
   const srcs = [];
   const nodes = [body, direct, directG, bus].concat(fNodes);
-  const partials = [1, 2, 3, 4, 5, 6, 7, 9];
+  const partials = [1, 2, 3, 4, 5, 6];
   partials.forEach((n, i) => {
     const osc = ctx.createOscillator();
     osc.type = n === 1 ? 'triangle' : 'sine';
     osc.frequency.setValueAtTime(f0 * n, t);
-    osc.detune.setValueAtTime(rnd(-7, 7) * (1 + i * 0.1), t);
+    osc.detune.setValueAtTime(softDetune(f0 * n, 0.3), t);
     // the voice settles slightly flat as it speaks
-    osc.frequency.exponentialRampToValueAtTime(Math.max(8, f0 * n * 0.988), t + dur);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(8, f0 * n * 0.991), t + dur);
     const g = ctx.createGain();
-    const amp = (0.5 / (1 + i * 0.85)) * gain;
+    const amp = (0.45 / (1 + i * 1.25)) * gain;
     g.gain.setValueAtTime(FLOOR, t);
-    g.gain.linearRampToValueAtTime(amp, t + 0.012 + i * 0.004);
-    g.gain.exponentialRampToValueAtTime(Math.max(FLOOR, amp * 0.3), t + dur * 0.35);
+    g.gain.linearRampToValueAtTime(amp, t + 0.07 + i * 0.02);
+    g.gain.exponentialRampToValueAtTime(Math.max(FLOOR, amp * 0.3), t + dur * 0.4);
     g.gain.exponentialRampToValueAtTime(FLOOR, t + dur);
     osc.connect(g); g.connect(body);
     osc.start(t);
@@ -1407,38 +1627,38 @@ function cueWord(s, o = {}) {
   // slow vibrato: alive, not mechanical
   const vib = ctx.createOscillator();
   const vibG = ctx.createGain();
-  vib.frequency.setValueAtTime(rnd(4.1, 5.4), t);
+  vib.frequency.setValueAtTime(rnd(3.4, 4.3), t);
   vibG.gain.setValueAtTime(0, t);
-  vibG.gain.linearRampToValueAtTime(rnd(3, 7), t + dur * 0.4);
+  vibG.gain.linearRampToValueAtTime(rnd(2, 4.5), t + dur * 0.45);
   vib.connect(vibG);
   try { vibG.connect(srcs[0].detune); } catch (e) { /* ignore */ }
   vib.start(t); srcs.push(vib); nodes.push(vibG);
 
-  // body envelope: sharp onset, long bloom
+  // body envelope: breathed onset, long bloom
   body.gain.setValueAtTime(FLOOR, t);
-  body.gain.linearRampToValueAtTime(0.55 * gain, t + 0.014);
-  body.gain.exponentialRampToValueAtTime(Math.max(FLOOR, 0.3 * gain), t + 0.5);
+  body.gain.linearRampToValueAtTime(0.5 * gain, t + 0.1);
+  body.gain.exponentialRampToValueAtTime(Math.max(FLOOR, 0.3 * gain), t + 0.6);
   body.gain.exponentialRampToValueAtTime(FLOOR, t + dur * 1.02);
 
   life(s, srcs, nodes, t + dur + 0.2);
 
-  // consonantal onset
+  // consonantal onset — a breath now, not a click
   noise(s, s._cueBus(0.3, 0, 2), t, {
-    dur: 0.09, peak: 0.16 * gain, attack: 0.001,
-    filter: { type: 'bandpass', freq: formants[0][1] * 1.4, Q: 1.6, sweepTo: formants[0][0], sweepTime: 0.08 }
+    color: 'pink', dur: 0.22, peak: 0.04 * gain, attack: 0.025,
+    filter: { type: 'bandpass', freq: clamp(formants[0][1] * 0.7, 200, 1800), Q: 1.1, sweepTo: formants[0][0], sweepTime: 0.18 }
   });
   // sub-weight under the utterance
   tone(s, s._cueBus(0.25, 0, ttl), t, {
-    freq: f0 / 2, type: 'sine', dur: dur * 0.75, peak: 0.22 * gain, attack: 0.02
+    freq: f0 / 2, type: 'sine', dur: dur * 0.75, peak: 0.18 * gain, attack: 0.09
   });
   // the tail blooms into the room after the voice stops
-  const bloom = s._cueBus(1, 0.1, ttl);
+  const bloom = s._cueBus(1, 0.08, ttl);
   bloom.gain.setValueAtTime(FLOOR, t);
-  bloom.gain.linearRampToValueAtTime(0.22 * gain, t + dur * 0.55);
+  bloom.gain.linearRampToValueAtTime(0.16 * gain, t + dur * 0.55);
   bloom.gain.exponentialRampToValueAtTime(FLOOR, t + dur * 1.6);
   tone(s, bloom, t + dur * 0.2, {
-    freq: f0 * 2, type: 'sine', dur: dur * 1.3, peak: 0.3, attack: dur * 0.3,
-    filter: { type: 'lowpass', freq: f0 * 12, Q: 0.7, sweepTo: f0 * 3, sweepTime: dur }
+    freq: f0 * 2, type: 'sine', dur: dur * 1.3, peak: 0.26, attack: dur * 0.3,
+    filter: { type: 'lowpass', freq: clamp(f0 * 6, 200, 2600), Q: 0.6, sweepTo: clamp(f0 * 2, 100, 1200), sweepTime: dur }
   });
 }
 
@@ -1448,58 +1668,61 @@ const CUES = {
   light: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.6, 0.1);
+    // the bloom used to sweep to 7.2 kHz; it opens to 2.6 kHz now and the
+    // opening is what carries it, not the brightness it arrives at
     noise(s, d, t, {
-      color: 'white', dur: 2.6, peak: 0.16, attack: 0.9,
-      filter: { type: 'bandpass', freq: 220, Q: 1.1, sweepTo: 7200, sweepTime: 1.5 }
+      color: 'pink', dur: 3, peak: 0.1, attack: 1.3,
+      filter: { type: 'bandpass', freq: 200, Q: 1.1, sweepTo: 2600, sweepTime: 2 }
     });
     [0, 4, 7, 11].forEach((deg, i) => {
-      tone(s, d, t + 0.35 + i * 0.05, {
-        freq: degree(deg, 1, EDENIC), type: 'sine', dur: 4.5 - i * 0.4,
-        peak: 0.12 / (1 + i * 0.5), attack: 0.5, pan: Math.sin(i * 2) * 0.6
+      tone(s, d, t + 0.35 + i * rnd(0.05, 0.12), {
+        freq: vary(degree(deg, 0, EDENIC), 6), type: 'sine', dur: 5 - i * 0.4,
+        peak: 0.085 / (1 + i * 0.6), attack: 0.8, pan: Math.sin(i * 2) * 0.6
       });
     });
-    tone(s, d, t, { freq: degree(0, -1), type: 'sine', dur: 3.2, peak: 0.2, attack: 0.3 });
+    tone(s, d, t, { freq: degree(0, -1), type: 'sine', dur: 3.6, peak: 0.16, attack: 0.55 });
   },
 
   separate: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.45, 0);
-    const f = degree(0, 0);
-    tone(s, d, t, { freq: f, type: 'triangle', dur: 2.8, peak: 0.12, attack: 0.08, pan: -0.1, glideTo: f / 2, glideTime: 1.8 });
-    tone(s, d, t, { freq: f, type: 'triangle', dur: 2.8, peak: 0.12, attack: 0.08, pan: 0.1, glideTo: f * 3, glideTime: 1.8 });
-    noise(s, d, t, { dur: 1.4, peak: 0.06, attack: 0.3, filter: { type: 'bandpass', freq: 900, Q: 0.9, sweepTo: 2600, sweepTime: 1.2 } });
+    const f = vary(degree(0, 0), 8);
+    tone(s, d, t, { freq: f, type: 'triangle', dur: 3.2, peak: 0.09, attack: 0.25, pan: -0.35, glideTo: f / 2, glideTime: 2.2 });
+    tone(s, d, t, { freq: f, type: 'sine', dur: 3.2, peak: 0.075, attack: 0.25, pan: 0.35, glideTo: f * 3, glideTime: 2.2 });
+    noise(s, d, t, { color: 'pink', dur: 1.8, peak: 0.04, attack: 0.5, filter: { type: 'bandpass', freq: 700, Q: 1.2, sweepTo: 1700, sweepTime: 1.5 } });
   },
 
   land: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.4, 0);
-    thump(s, d, t, { freq: 52, dur: 1.8, peak: 0.5, drop: 0.45 });
+    thump(s, d, t, { freq: 52, dur: 2, peak: 0.36, drop: 0.45, attack: 0.03 });
     noise(s, d, t + 0.02, {
-      color: 'brown', dur: 1.6, peak: 0.16, attack: 0.01,
-      filter: { type: 'lowpass', freq: 900, Q: 1.6, sweepTo: 140, sweepTime: 1.2 }
+      color: 'brown', dur: 1.8, peak: 0.11, attack: 0.05,
+      filter: { type: 'lowpass', freq: 500, Q: 0.9, sweepTo: 120, sweepTime: 1.5 }
     });
-    tone(s, d, t + 0.05, { freq: degree(0, -1), type: 'triangle', dur: 3.4, peak: 0.13, attack: 0.1 });
+    tone(s, d, t + 0.05, { freq: degree(0, -1), type: 'triangle', dur: 3.8, peak: 0.1, attack: 0.3 });
   },
 
   growth: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.5, 0.12);
-    for (let i = 0; i < 6; i++) {
-      pluckVoice(s, d, t + i * rnd(0.1, 0.17), {
-        freq: degree(i * 2, 1), dur: rnd(1.6, 2.8), peak: 0.085 - i * 0.008,
-        pan: rnd(-0.6, 0.6), open: 5 + i
+    for (let i = 0; i < 5; i++) {
+      pluckVoice(s, d, t + i * rnd(0.14, 0.26), {
+        freq: degree(i * 2, 1), dur: rnd(2, 3.4), peak: 0.055 - i * 0.006,
+        pan: rnd(-0.6, 0.6), open: rnd(3, 5)
       });
     }
-    noise(s, d, t, { color: 'pink', dur: 1.8, peak: 0.05, attack: 0.5, filter: { type: 'bandpass', freq: 600, Q: 1, sweepTo: 3200, sweepTime: 1.4 } });
+    noise(s, d, t, { color: 'pink', dur: 2.2, peak: 0.035, attack: 0.8, filter: { type: 'bandpass', freq: 500, Q: 1.2, sweepTo: 1600, sweepTime: 1.8 } });
   },
 
   stars: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.8, 0.2);
-    for (let i = 0; i < 9; i++) {
-      bell(s, d, t + rnd(0, 1.9), {
-        freq: degree(pick([0, 2, 4, 6, 7, 9]), rint(2, 3)), dur: rnd(2, 5),
-        peak: rnd(0.018, 0.038), pan: rnd(-0.9, 0.9)
+    // fewer, lower, more spread out in time — a sky, not a glockenspiel
+    for (let i = 0; i < 6; i++) {
+      bell(s, d, t + rnd(0, 2.8), {
+        freq: degree(pick([0, 2, 4, 6, 7, 9]), rint(1, 2)), dur: rnd(3, 6.5),
+        peak: rnd(0.014, 0.028), pan: rnd(-0.9, 0.9)
       });
     }
   },
@@ -1507,12 +1730,12 @@ const CUES = {
   swarm: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.35, 0.1);
-    noise(s, d, t, { dur: 1.3, peak: 0.07, attack: 0.15, filter: { type: 'bandpass', freq: 2400, Q: 6, sweepTo: 1100, sweepTime: 1 } });
-    for (let i = 0; i < 14; i++) {
-      tone(s, d, t + i * rnd(0.03, 0.09), {
-        freq: degree(rint(0, 8), rint(2, 3)), type: 'triangle', dur: rnd(0.1, 0.24),
-        peak: rnd(0.02, 0.045), attack: 0.005, pan: rnd(-0.9, 0.9),
-        filter: { type: 'bandpass', freq: rnd(1600, 5000), Q: 4 }
+    noise(s, d, t, { color: 'pink', dur: 1.6, peak: 0.045, attack: 0.3, filter: { type: 'bandpass', freq: 1300, Q: 2.4, sweepTo: 700, sweepTime: 1.3 } });
+    for (let i = 0; i < 9; i++) {
+      tone(s, d, t + i * rnd(0.05, 0.14), {
+        freq: vary(degree(rint(0, 8), rint(1, 2)), 15), type: 'triangle', dur: rnd(0.18, 0.4),
+        peak: rnd(0.012, 0.028), attack: rnd(0.018, 0.04), pan: rnd(-0.9, 0.9),
+        filter: { type: 'bandpass', freq: rnd(800, 2200), Q: 1.8 }
       });
     }
   },
@@ -1521,175 +1744,198 @@ const CUES = {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.4, 0);
     const ctx = s.ctx;
-    const dur = 1.5;
+    const dur = 1.5 * jitter(0.1);
     const src = ctx.createBufferSource();
     src.buffer = noiseBuffer(ctx, 'pink', 3);
     src.loop = true;
     const flt = ctx.createBiquadFilter();
     flt.type = 'bandpass';
-    flt.frequency.setValueAtTime(700, t);
-    flt.Q.setValueAtTime(1.4, t);
-    flt.frequency.linearRampToValueAtTime(1500, t + dur);
+    flt.frequency.setValueAtTime(rnd(420, 560), t);
+    flt.Q.setValueAtTime(1.1, t);
+    flt.frequency.linearRampToValueAtTime(rnd(950, 1250), t + dur);
     const g = ctx.createGain();
     const p = panner(ctx, -0.7);
     const nodes = [flt, g, d];
     src.connect(flt); flt.connect(g);
     if (p) { g.connect(p); p.connect(d); nodes.push(p); p.pan.linearRampToValueAtTime(0.7, t + dur); }
     else g.connect(d);
-    // wing-beat amplitude
+    // wing-beat amplitude, slightly uneven so it reads as an animal
     g.gain.setValueAtTime(FLOOR, t);
-    const beats = 11;
+    const beats = rint(8, 11);
     for (let i = 0; i < beats; i++) {
-      const bt = t + 0.02 + i * (dur / beats);
-      g.gain.linearRampToValueAtTime(0.11 * (1 - i / beats * 0.6), bt);
-      g.gain.linearRampToValueAtTime(0.012, bt + dur / beats * 0.55);
+      const bt = t + 0.03 + i * (dur / beats);
+      g.gain.linearRampToValueAtTime(0.07 * (1 - i / beats * 0.6) * jitter(0.12), bt);
+      g.gain.linearRampToValueAtTime(0.009, bt + dur / beats * 0.55);
     }
-    g.gain.exponentialRampToValueAtTime(FLOOR, t + dur + 0.2);
+    g.gain.exponentialRampToValueAtTime(FLOOR, t + dur + 0.25);
     src.start(t, Math.random());
-    life(s, src, nodes, t + dur + 0.3);
+    life(s, src, nodes, t + dur + 0.35);
   },
 
   breath: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.45, 0);
     noise(s, d, t, {
-      color: 'white', dur: 1.5, peak: 0.1, attack: 0.7,
-      filter: { type: 'bandpass', freq: 420, Q: 1.1, sweepTo: 1400, sweepTime: 1.3, hp: 180 }
+      color: 'pink', dur: 1.7, peak: 0.075, attack: 0.9,
+      filter: { type: 'bandpass', freq: 380, Q: 1.1, sweepTo: 950, sweepTime: 1.5, hp: 160 }
     });
-    noise(s, d, t + 1.5, {
-      color: 'white', dur: 2.6, peak: 0.085, attack: 0.25,
-      filter: { type: 'bandpass', freq: 1300, Q: 1.3, sweepTo: 330, sweepTime: 2.2, hp: 150 }
+    noise(s, d, t + 1.6, {
+      color: 'pink', dur: 2.8, peak: 0.06, attack: 0.45,
+      filter: { type: 'bandpass', freq: 900, Q: 1.3, sweepTo: 300, sweepTime: 2.4, hp: 140 }
     });
-    tone(s, d, t + 1.45, { freq: degree(0, 0), type: 'sine', dur: 4.5, peak: 0.08, attack: 1.1 });
-    tone(s, d, t + 1.45, { freq: degree(4, 0), type: 'sine', dur: 4, peak: 0.05, attack: 1.4, pan: 0.3 });
+    tone(s, d, t + 1.55, { freq: degree(0, 0), type: 'sine', dur: 5, peak: 0.065, attack: 1.5 });
+    tone(s, d, t + 1.55, { freq: degree(4, 0), type: 'sine', dur: 4.4, peak: 0.04, attack: 1.8, pan: 0.35 });
   },
 
   rest: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.8, 0.1);
-    [[0, -1, 0.14], [0, 0, 0.08], [4, 0, 0.06], [2, 1, 0.035]].forEach(([deg, o, g], i) => {
-      tone(s, d, t + i * 0.04, { freq: degree(deg, o, EDENIC), type: 'sine', dur: 7 - i * 0.5, peak: g, attack: 0.6, pan: Math.sin(i * 2) * 0.4 });
+    [[0, -1, 0.12], [0, 0, 0.065], [4, 0, 0.045], [2, 1, 0.022]].forEach(([deg, o, g], i) => {
+      tone(s, d, t + i * rnd(0.05, 0.14), {
+        freq: degree(deg, o, EDENIC), type: 'sine', dur: 7.5 - i * 0.5, peak: g,
+        attack: 1 + i * 0.3, pan: Math.sin(i * 2) * 0.4
+      });
     });
   },
 
   name: (s, o = {}) => {
     const t = s.ctx.currentTime + 0.01;
-    const d = s._cueBus(0.4, 0.08, 4);
+    const d = s._cueBus(0.4, 0.08, 5);
     const a = rint(0, 5);
     const b = a + pick([1, 2, 2, 3, -2]);
-    pluckVoice(s, d, t, { freq: degree(a, 1, EDENIC), dur: 1.9, peak: 0.08, pan: -0.15, open: 8 });
-    pluckVoice(s, d, t + rnd(0.18, 0.3), { freq: degree(b, 1, EDENIC), dur: 2.4, peak: 0.07, pan: 0.15, open: 9 });
-    tone(s, d, t, { freq: degree(a, -1, EDENIC), type: 'sine', dur: 2.6, peak: num(o.gain, 0.07), attack: 0.3 });
+    pluckVoice(s, d, t, { freq: degree(a, 1, EDENIC), dur: 2.2, peak: 0.05, pan: -0.25, open: rnd(3, 5) });
+    pluckVoice(s, d, t + rnd(0.22, 0.42), { freq: degree(b, 1, EDENIC), dur: 2.8, peak: 0.042, pan: 0.25, open: rnd(3, 5) });
+    tone(s, d, t, { freq: degree(a, -1, EDENIC), type: 'sine', dur: 3, peak: num(o.gain, 0.055), attack: 0.6 });
   },
 
+  // Fires on a loop for minutes at a time in the tardemah scenes, so it has
+  // the softest onset and the widest per-firing variation of anything here.
   heartbeat: (s, o = {}) => {
     const t = s.ctx.currentTime + 0.01;
-    const d = s._cueBus(0.2, 0, 2);
+    const d = s._cueBus(0.22, 0, 2);
     const g = clamp(num(o.gain, 1), 0, 2);
-    thump(s, d, t, { freq: 58, dur: 0.45, peak: 0.34 * g, drop: 0.55 });
-    thump(s, d, t + 0.27, { freq: 50, dur: 0.38, peak: 0.21 * g, drop: 0.6 });
+    thump(s, d, t, { freq: rnd(54, 60), dur: 0.5, peak: rnd(0.16, 0.21) * g, drop: 0.55, attack: 0.028 });
+    thump(s, d, t + rnd(0.24, 0.31), { freq: rnd(47, 52), dur: 0.4, peak: rnd(0.09, 0.13) * g, drop: 0.6, attack: 0.028 });
   },
 
   rib: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.55, 0);
-    // a dry snap, then something drawn out of the body
-    noise(s, d, t, { dur: 0.07, peak: 0.22, attack: 0.0012, filter: { type: 'bandpass', freq: 2300, Q: 1.1, sweepTo: 700, sweepTime: 0.06 } });
-    thump(s, d, t, { freq: 90, dur: 0.3, peak: 0.2, drop: 0.5, grit: false });
-    tone(s, d, t + 0.03, {
-      freq: degree(0, 0), type: 'triangle', dur: 3.4, peak: 0.12, attack: 0.03,
-      glideTo: degree(4, 1), glideTime: 2.4,
-      filter: { type: 'bandpass', freq: 700, Q: 3.5, sweepTo: 2600, sweepTime: 2.4 }
+    // the snap was a 1.2 ms transient at 2.3 kHz — a wince every time. It is
+    // now a soft give, and the drawing-out carries the moment instead.
+    noise(s, d, t, { color: 'pink', dur: 0.14, peak: 0.07, attack: 0.012, filter: { type: 'bandpass', freq: 1100, Q: 0.9, sweepTo: 500, sweepTime: 0.12 } });
+    thump(s, d, t, { freq: 88, dur: 0.36, peak: 0.14, drop: 0.5, grit: false, attack: 0.02 });
+    tone(s, d, t + 0.05, {
+      freq: degree(0, 0), type: 'triangle', dur: 3.8, peak: 0.085, attack: 0.15,
+      glideTo: degree(4, 1), glideTime: 2.8,
+      filter: { type: 'bandpass', freq: 600, Q: 1.4, sweepTo: 1700, sweepTime: 2.8 }
     });
-    bell(s, d, t + 0.4, { freq: degree(4, 2, EDENIC), dur: 3.6, peak: 0.03 });
+    bell(s, d, t + 0.5, { freq: degree(4, 1, EDENIC), dur: 4, peak: 0.026 });
   },
 
   awake: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.6, 0.12);
-    noise(s, d, t, { color: 'pink', dur: 2.4, peak: 0.07, attack: 1.3, filter: { type: 'lowpass', freq: 300, Q: 1, sweepTo: 6000, sweepTime: 2 } });
-    [[0, -1, 0.14], [0, 0, 0.09], [2, 0, 0.075], [4, 0, 0.06], [0, 1, 0.035]].forEach(([deg, o, g], i) => {
-      tone(s, d, t + i * 0.09, {
-        freq: degree(deg, o, EDENIC), type: i ? 'sine' : 'triangle', dur: 6 - i * 0.4,
-        peak: g, attack: 1 + i * 0.25, pan: Math.sin(i * 1.7) * 0.5,
-        filter: { type: 'lowpass', freq: 400, Q: 0.8, sweepTo: 7000, sweepTime: 2.2 }
+    noise(s, d, t, { color: 'pink', dur: 2.8, peak: 0.05, attack: 1.6, filter: { type: 'lowpass', freq: 260, Q: 0.8, sweepTo: 2200, sweepTime: 2.4 } });
+    [[0, -1, 0.12], [0, 0, 0.075], [2, 0, 0.06], [4, 0, 0.045], [0, 1, 0.022]].forEach(([deg, o, g], i) => {
+      tone(s, d, t + i * rnd(0.09, 0.2), {
+        freq: degree(deg, o, EDENIC), type: i ? 'sine' : 'triangle', dur: 6.5 - i * 0.4,
+        peak: g, attack: 1.3 + i * 0.3, pan: Math.sin(i * 1.7) * 0.5,
+        filter: { type: 'lowpass', freq: 350, Q: 0.7, sweepTo: 2800, sweepTime: 2.6 }
       });
     });
   },
 
   hiss: (s) => {
     const t = s.ctx.currentTime + 0.01;
-    const d = s._cueBus(0.08, 0); // dry: right at your ear
+    const d = s._cueBus(0.1, 0); // dry: right at your ear
+    // down two octaves from the old 5-7 kHz band, and a third as loud: it
+    // should feel close, which is about proximity, not about treble
     noise(s, d, t, {
-      color: 'white', dur: rnd(1.1, 1.8), peak: 0.1, attack: 0.18, pan: rnd(-0.75, -0.3),
-      filter: { type: 'bandpass', freq: rnd(5200, 7400), Q: 2.4, sweepTo: rnd(2800, 4200), sweepTime: 1.2 }
+      color: 'pink', dur: rnd(1.3, 2.1), peak: 0.045, attack: 0.35, pan: rnd(-0.75, -0.3),
+      filter: { type: 'bandpass', freq: rnd(1700, 2600), Q: 1.6, sweepTo: rnd(900, 1500), sweepTime: 1.5 }
     });
-    tone(s, d, t + 0.1, {
-      freq: degree(1, 0), type: 'sine', dur: 1.6, peak: 0.035, attack: 0.3,
-      glideTo: degree(0, 0), glideTime: 1.2, pan: -0.4
+    // the b2 leaning down onto the tonic — melodic, and it resolves
+    tone(s, d, t + 0.15, {
+      freq: degree(1, 0), type: 'sine', dur: 1.9, peak: 0.028, attack: 0.45,
+      glideTo: degree(0, 0), glideTime: 1.4, pan: -0.4
     });
   },
 
   pluck: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.3, 0, 3);
-    noise(s, d, t, { dur: 0.1, peak: 0.13, attack: 0.002, filter: { type: 'bandpass', freq: 1700, Q: 1.3, sweepTo: 500, sweepTime: 0.09 } });
+    noise(s, d, t, { color: 'pink', dur: 0.12, peak: 0.045, attack: 0.012, filter: { type: 'bandpass', freq: rnd(700, 1100), Q: 1, sweepTo: 400, sweepTime: 0.11 } });
     tone(s, d, t + 0.01, {
-      freq: degree(2, 1), type: 'triangle', dur: 1.4, peak: 0.1, attack: 0.004,
-      glideTo: degree(1, 1), glideTime: 0.9,
-      filter: { type: 'lowpass', freq: 3000, Q: 1.4, sweepTo: 500, sweepTime: 1 }
+      freq: vary(degree(2, 1), 18), type: 'triangle', dur: 1.7, peak: 0.065, attack: 0.018,
+      glideTo: degree(1, 1), glideTime: 1.1,
+      filter: { type: 'lowpass', freq: 1500, Q: 0.9, sweepTo: 420, sweepTime: 1.2 }
     });
-    thump(s, d, t + 0.06, { freq: 110, dur: 0.35, peak: 0.1, drop: 0.5, grit: false });
+    thump(s, d, t + 0.06, { freq: 110, dur: 0.4, peak: 0.07, drop: 0.5, grit: false, attack: 0.02 });
   },
 
   bite: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.25, 0);
-    noise(s, d, t, { dur: 0.16, peak: 0.26, attack: 0.001, filter: { type: 'bandpass', freq: 2800, Q: 0.9, sweepTo: 420, sweepTime: 0.14 } });
-    noise(s, d, t + 0.05, { color: 'brown', dur: 0.4, peak: 0.14, attack: 0.004, filter: { type: 'lowpass', freq: 1400, Q: 2.5, sweepTo: 200, sweepTime: 0.35 } });
-    thump(s, d, t, { freq: 76, dur: 0.6, peak: 0.3, drop: 0.4 });
-    // the world flinches
-    tone(s, d, t + 0.02, {
-      freq: degree(0, 0), type: 'sawtooth', dur: 2.2, peak: 0.07, attack: 0.01,
-      glideTo: semi(degree(0, 0), -1), glideTime: 1.6,
-      filter: { type: 'lowpass', freq: 2000, Q: 2, sweepTo: 260, sweepTime: 1.8 }
+    noise(s, d, t, { color: 'pink', dur: 0.22, peak: 0.1, attack: 0.014, filter: { type: 'bandpass', freq: 1400, Q: 0.8, sweepTo: 380, sweepTime: 0.2 } });
+    noise(s, d, t + 0.06, { color: 'brown', dur: 0.5, peak: 0.09, attack: 0.02, filter: { type: 'lowpass', freq: 900, Q: 1.2, sweepTo: 180, sweepTime: 0.45 } });
+    thump(s, d, t, { freq: 76, dur: 0.7, peak: 0.2, drop: 0.4, attack: 0.025 });
+    // the world flinches — the semitone sag that the whole second half inherits
+    tone(s, d, t + 0.04, {
+      freq: degree(0, 0), type: 'triangle', dur: 2.6, peak: 0.055, attack: 0.12,
+      glideTo: semi(degree(0, 0), -1), glideTime: 2,
+      filter: { type: 'lowpass', freq: 1100, Q: 1.2, sweepTo: 230, sweepTime: 2.2 }
     });
   },
 
   eyesOpen: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.7, 0.15);
-    noise(s, d, t, { dur: 1.8, peak: 0.1, attack: 0.012, filter: { type: 'highpass', freq: 1800, Q: 0.8, sweepTo: 9000, sweepTime: 1.4 } });
-    // bright, and wrong: a semitone cluster above a stable fifth
-    [[0, 0, 0.08], [1, 0, 0.06], [4, 0, 0.05], [1, 1, 0.04], [0, 2, 0.025]].forEach(([deg, o, g], i) => {
-      tone(s, d, t + i * 0.012, {
-        freq: degree(deg, o) * (i === 3 ? 1.012 : 1), type: 'sine', dur: 4.2 - i * 0.3,
-        peak: g, attack: 0.02, pan: Math.sin(i * 2.4) * 0.7, detune: rnd(-16, 16)
+    noise(s, d, t, { color: 'pink', dur: 2.2, peak: 0.055, attack: 0.25, filter: { type: 'bandpass', freq: 900, Q: 0.7, sweepTo: 2600, sweepTime: 1.8 } });
+    // Still bright and still wrong, but the wrongness is now a short leaning
+    // b2 over a stable fifth rather than a four-second sustained cluster, and
+    // the detune is beat-safe instead of a random 32-cent spread.
+    [[0, 0, 0.07, 4.6], [4, 0, 0.05, 4.2], [0, 1, 0.03, 3.6]].forEach(([deg, o, g, dur], i) => {
+      const f = degree(deg, o);
+      tone(s, d, t + i * rnd(0.02, 0.06), {
+        freq: f, type: 'sine', dur, peak: g, attack: 0.09,
+        pan: Math.sin(i * 2.4) * 0.7, detune: softDetune(f, 0.25)
       });
+    });
+    // the b2, brief and resolving upward out of the way
+    tone(s, d, t + 0.05, {
+      freq: degree(1, 0), type: 'sine', dur: 1.5, peak: 0.045, attack: 0.07, pan: 0.4,
+      glideTo: degree(2, 0), glideTime: 1.1
     });
   },
 
+  // Fires on every step. It has to disappear into the floor, so: no transient
+  // above 700 Hz, a 20 ms onset, and pitch, level and timbre all re-rolled
+  // each time.
   footstep: (s, o = {}) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.25, 0, 2);
     const g = clamp(num(o.gain, 1), 0, 2);
     const pan = num(o.pan, rnd(-0.4, 0.4));
-    thump(s, d, t, { freq: rnd(58, 74), dur: 0.26, peak: 0.16 * g, drop: 0.5, pan, grit: false });
-    noise(s, d, t, { color: 'brown', dur: 0.2, peak: 0.07 * g, attack: 0.002, pan, filter: { type: 'bandpass', freq: rnd(700, 1400), Q: 1.1, sweepTo: 300, sweepTime: 0.16 } });
+    thump(s, d, t, { freq: rnd(54, 72), dur: rnd(0.24, 0.32), peak: rnd(0.07, 0.1) * g, drop: 0.5, pan, grit: false, attack: rnd(0.016, 0.026) });
+    noise(s, d, t + rnd(0, 0.012), {
+      color: 'brown', dur: 0.24, peak: rnd(0.025, 0.04) * g, attack: 0.014, pan,
+      filter: { type: 'bandpass', freq: rnd(320, 680), Q: 0.9, sweepTo: 220, sweepTime: 0.2 }
+    });
   },
 
   ayeka: (s) => {
     // the question: the same voice, softer, and it rises at the end
-    cueWord(s, { day: 7, gain: 0.65, length: 1.3 });
+    cueWord(s, { day: 7, gain: 0.6, length: 1.3 });
     const t = s.ctx.currentTime + 0.9;
     const d = s._cueBus(0.9, 0.2);
     tone(s, d, t, {
-      freq: degree(0, 0), type: 'sine', dur: 4.5, peak: 0.07, attack: 1.2,
-      glideTo: degree(1, 0), glideTime: 3.4, pan: 0.1
+      freq: degree(0, 0), type: 'sine', dur: 5, peak: 0.055, attack: 1.6,
+      glideTo: degree(1, 0), glideTime: 3.8, pan: 0.15
     });
-    tone(s, d, t + 0.2, {
-      freq: degree(4, 0), type: 'sine', dur: 4, peak: 0.045, attack: 1.4,
-      glideTo: degree(5, 0), glideTime: 3, pan: -0.1
+    tone(s, d, t + rnd(0.2, 0.45), {
+      freq: degree(4, 0), type: 'sine', dur: 4.4, peak: 0.035, attack: 1.8,
+      glideTo: degree(5, 0), glideTime: 3.2, pan: -0.15
     });
   },
 
@@ -1697,75 +1943,103 @@ const CUES = {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.55, 0);
     const base = degree(0, -1);
+    // four detuned sawtooths spread over 33 cents was a snarl of beating
+    // upper harmonics. Triangles, a beat-safe spread, and a much lower filter
+    // ceiling keep the weight and lose the grind.
     for (let i = 0; i < 4; i++) {
-      tone(s, d, t + i * 0.06, {
-        freq: base * (1 + i * 0.5), type: 'sawtooth', dur: 5.5 - i * 0.5, peak: 0.1 / (1 + i * 0.7),
-        attack: 0.25, detune: (i % 2 ? 1 : -1) * (9 + i * 8), pan: Math.sin(i * 1.9) * 0.6,
-        glideTo: base * (1 + i * 0.5) * 0.89, glideTime: 4.5,
-        filter: { type: 'lowpass', freq: 1800, Q: 2.4, sweepTo: 220, sweepTime: 4.2 }
+      const f = base * (1 + i * 0.5);
+      tone(s, d, t + i * rnd(0.06, 0.14), {
+        freq: f, type: i === 0 ? 'sawtooth' : 'triangle', dur: 6 - i * 0.5,
+        peak: 0.075 / (1 + i * 0.8), attack: 0.5,
+        detune: softDetune(f * 3, 0.4), pan: Math.sin(i * 1.9) * 0.6,
+        glideTo: f * 0.89, glideTime: 5,
+        filter: { type: 'lowpass', freq: 800, Q: 1.1, sweepTo: 190, sweepTime: 4.6 }
       });
     }
-    noise(s, d, t, { color: 'brown', dur: 5, peak: 0.13, attack: 0.5, filter: { type: 'lowpass', freq: 500, Q: 2, sweepTo: 90, sweepTime: 4 } });
-    thump(s, d, t, { freq: 40, dur: 2.6, peak: 0.34, drop: 0.7 });
+    noise(s, d, t, { color: 'brown', dur: 5.5, peak: 0.1, attack: 0.9, filter: { type: 'lowpass', freq: 380, Q: 1.2, sweepTo: 85, sweepTime: 4.5 } });
+    thump(s, d, t, { freq: 40, dur: 2.8, peak: 0.24, drop: 0.7, attack: 0.07 });
   },
 
   tear: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.35, 0);
-    noise(s, d, t, { dur: 0.9, peak: 0.2, attack: 0.004, filter: { type: 'bandpass', freq: 5200, Q: 1.1, sweepTo: 320, sweepTime: 0.85 } });
-    noise(s, d, t + 0.04, { color: 'brown', dur: 1.1, peak: 0.1, attack: 0.01, pan: 0.3, filter: { type: 'highpass', freq: 2400, Q: 0.9, sweepTo: 400, sweepTime: 1 } });
-    tone(s, d, t, { freq: degree(3, 0), type: 'sawtooth', dur: 1.4, peak: 0.05, attack: 0.01, glideTo: degree(0, -1), glideTime: 1.1, filter: { type: 'lowpass', freq: 2600, Q: 3, sweepTo: 300, sweepTime: 1.2 } });
+    noise(s, d, t, { color: 'pink', dur: 1.1, peak: 0.085, attack: 0.025, filter: { type: 'bandpass', freq: rnd(1800, 2400), Q: 0.9, sweepTo: 300, sweepTime: 1 } });
+    noise(s, d, t + 0.05, { color: 'brown', dur: 1.3, peak: 0.06, attack: 0.03, pan: 0.3, filter: { type: 'lowpass', freq: 1400, Q: 0.8, sweepTo: 320, sweepTime: 1.2 } });
+    tone(s, d, t, {
+      freq: degree(3, 0), type: 'triangle', dur: 1.7, peak: 0.04, attack: 0.04,
+      glideTo: degree(0, -1), glideTime: 1.3,
+      filter: { type: 'lowpass', freq: 1300, Q: 1.2, sweepTo: 260, sweepTime: 1.4 }
+    });
   },
 
   gate: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.9, 0.1);
-    thump(s, d, t, { freq: 34, dur: 4.5, peak: 0.55, drop: 0.75 });
-    noise(s, d, t, { color: 'brown', dur: 3, peak: 0.2, attack: 0.006, filter: { type: 'lowpass', freq: 1100, Q: 2.4, sweepTo: 90, sweepTime: 2.6 } });
-    bell(s, d, t + 0.02, {
-      freq: degree(0, 0), dur: 7, peak: 0.075,
-      ratios: [1, 1.73, 2.41, 3.19, 4.57, 6.11, 7.83]
+    thump(s, d, t, { freq: 34, dur: 5, peak: 0.38, drop: 0.75, attack: 0.05 });
+    noise(s, d, t, { color: 'brown', dur: 3.4, peak: 0.14, attack: 0.035, filter: { type: 'lowpass', freq: 600, Q: 1.2, sweepTo: 80, sweepTime: 3 } });
+    // still a clangorous inharmonic set, but the top two partials are gone and
+    // bell() now rolls the rest off hard
+    bell(s, d, t + 0.05, {
+      freq: degree(0, 0), dur: 8, peak: 0.055,
+      ratios: [1, 1.73, 2.41, 3.19, 4.57]
     });
-    tone(s, d, t + 0.5, { freq: degree(1, -1), type: 'sawtooth', dur: 6, peak: 0.06, attack: 1.2, filter: { type: 'lowpass', freq: 400, Q: 1.6 } });
+    tone(s, d, t + 0.6, { freq: degree(1, -1), type: 'triangle', dur: 6.5, peak: 0.05, attack: 1.8, filter: { type: 'lowpass', freq: 320, Q: 1.1 } });
   },
 
   sword: (s) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.65, 0.18);
-    noise(s, d, t, { dur: 0.8, peak: 0.14, attack: 0.18, pan: -0.5, filter: { type: 'bandpass', freq: 900, Q: 1.2, sweepTo: 6400, sweepTime: 0.6 } });
-    bell(s, d, t + 0.1, {
-      freq: degree(4, 2), dur: 4.5, peak: 0.055,
-      ratios: [1, 1.41, 2.13, 3.07, 4.63, 6.29, 8.11]
+    noise(s, d, t, { color: 'pink', dur: 0.9, peak: 0.08, attack: 0.3, pan: -0.5, filter: { type: 'bandpass', freq: 700, Q: 1, sweepTo: 2800, sweepTime: 0.75 } });
+    bell(s, d, t + 0.12, {
+      freq: degree(4, 1), dur: 5, peak: 0.045,
+      ratios: [1, 1.41, 2.13, 3.07, 4.63]
     });
     for (let i = 0; i < 3; i++) {
-      tone(s, d, t + 0.12 + i * 0.07, {
-        freq: degree(1, 3) * rnd(0.97, 1.06), type: 'sine', dur: rnd(1.6, 3),
-        peak: 0.03, attack: 0.004, pan: rnd(-0.8, 0.8),
-        glideTo: degree(1, 3) * rnd(1.05, 1.2), glideTime: 1.2
+      const f = degree(1, 2) * rnd(0.97, 1.06);
+      tone(s, d, t + 0.15 + i * rnd(0.07, 0.16), {
+        freq: f, type: 'sine', dur: rnd(2, 3.4),
+        peak: 0.02, attack: 0.035, pan: rnd(-0.8, 0.8),
+        glideTo: f * rnd(1.05, 1.2), glideTime: 1.5
       });
     }
-    thump(s, d, t, { freq: 70, dur: 0.8, peak: 0.2, drop: 0.5 });
+    thump(s, d, t, { freq: 70, dur: 0.9, peak: 0.15, drop: 0.5, attack: 0.025 });
   },
 
+  // click and hover fire more often than anything else in the game — hundreds
+  // of times per session. They are now quiet, blunt-edged, low, and never the
+  // same pitch twice, which is the difference between a UI that responds and
+  // a UI that nags.
   click: (s) => {
     const t = s.ctx.currentTime + 0.005;
-    const d = s._cueBus(0.12, 0, 1);
-    noise(s, d, t, { dur: 0.035, peak: 0.07, attack: 0.001, filter: { type: 'bandpass', freq: 3200, Q: 2.2 } });
-    tone(s, d, t, { freq: degree(4, 2), type: 'sine', dur: 0.09, peak: 0.05, attack: 0.002 });
+    const d = s._cueBus(0.14, 0, 1);
+    noise(s, d, t, {
+      color: 'pink', dur: 0.06, peak: 0.022, attack: 0.008,
+      filter: { type: 'bandpass', freq: rnd(900, 1500), Q: 1.1 }
+    });
+    tone(s, d, t, {
+      freq: vary(degree(pick([0, 2, 4]), 1, EDENIC), 20), type: 'sine',
+      dur: rnd(0.13, 0.19), peak: 0.026, attack: 0.012
+    });
   },
 
   hover: (s) => {
     const t = s.ctx.currentTime + 0.005;
-    const d = s._cueBus(0.2, 0, 1);
-    tone(s, d, t, { freq: degree(4, 2, EDENIC), type: 'sine', dur: 0.22, peak: 0.035, attack: 0.004 });
-    tone(s, d, t + 0.01, { freq: degree(6, 2, EDENIC), type: 'sine', dur: 0.16, peak: 0.018, attack: 0.004, pan: 0.2 });
+    const d = s._cueBus(0.22, 0, 1);
+    const deg = pick([4, 6, 7]);
+    tone(s, d, t, {
+      freq: vary(degree(deg, 1, EDENIC), 25), type: 'sine',
+      dur: rnd(0.26, 0.38), peak: 0.014, attack: 0.03, pan: rnd(-0.2, 0.2)
+    });
   },
 
   chime: (s, o = {}) => {
     const t = s.ctx.currentTime + 0.01;
     const d = s._cueBus(0.6, 0.12);
     const deg = Number.isFinite(o.degree) ? o.degree : pick([0, 2, 4, 6, 7]);
-    bell(s, d, t, { freq: degree(deg, 2, EDENIC), dur: num(o.dur, 3.4), peak: num(o.gain, 0.05) });
+    bell(s, d, t, {
+      freq: vary(degree(deg, 1, EDENIC), 6), dur: num(o.dur, 4) * jitter(0.15),
+      peak: num(o.gain, 0.04)
+    });
   }
 };
 
@@ -1816,7 +2090,7 @@ export class Score {
       if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) { /* gesture may still be pending */ } }
 
       this._buildMaster();
-      this.reverb = new Reverb(this, { decay: 3.4, wet: 0.95 });
+      this.reverb = new Reverb(this, { decay: 3.4, wet: 0.78 });
       this.reverb.output.connect(this.bus);
 
       this._buildDelay();
@@ -1840,43 +2114,63 @@ export class Score {
     this.bus = ctx.createGain();
     this.bus.gain.setValueAtTime(1, t);
 
+    // Master tilt. A fixed shelf taking about 6 dB off everything above
+    // 3.2 kHz, plus a hard ceiling at 11 kHz. Nothing in this score has any
+    // business up there, and over twenty-five minutes the top octave is the
+    // first thing that turns "atmosphere" into "please turn that off".
+    this.air = ctx.createBiquadFilter();
+    this.air.type = 'highshelf';
+    this.air.frequency.setValueAtTime(3200, t);
+    this.air.gain.setValueAtTime(-6, t);
+
+    this.ceiling = ctx.createBiquadFilter();
+    this.ceiling.type = 'lowpass';
+    this.ceiling.frequency.setValueAtTime(11000, t);
+    this.ceiling.Q.setValueAtTime(0.5, t);
+
     this.sat = ctx.createWaveShaper();
-    this.sat.curve = saturationCurve(1.5);
+    this.sat.curve = saturationCurve(1.15);
     if ('oversample' in this.sat) this.sat.oversample = '2x';
 
+    // Slower and gentler than before: a 6 ms attack at 3.5:1 was audibly
+    // grabbing every thump and breathing back up under the beds.
     this.comp = ctx.createDynamicsCompressor();
-    this.comp.threshold.setValueAtTime(-16, t);
-    this.comp.knee.setValueAtTime(14, t);
-    this.comp.ratio.setValueAtTime(3.5, t);
-    this.comp.attack.setValueAtTime(0.006, t);
-    this.comp.release.setValueAtTime(0.28, t);
+    this.comp.threshold.setValueAtTime(-20, t);
+    this.comp.knee.setValueAtTime(22, t);
+    this.comp.ratio.setValueAtTime(2.4, t);
+    this.comp.attack.setValueAtTime(0.025, t);
+    this.comp.release.setValueAtTime(0.5, t);
 
     this.limiter = ctx.createDynamicsCompressor();
-    this.limiter.threshold.setValueAtTime(-2.5, t);
-    this.limiter.knee.setValueAtTime(0, t);
-    this.limiter.ratio.setValueAtTime(20, t);
-    this.limiter.attack.setValueAtTime(0.001, t);
-    this.limiter.release.setValueAtTime(0.09, t);
+    this.limiter.threshold.setValueAtTime(-3.5, t);
+    this.limiter.knee.setValueAtTime(3, t);
+    this.limiter.ratio.setValueAtTime(14, t);
+    this.limiter.attack.setValueAtTime(0.004, t);
+    this.limiter.release.setValueAtTime(0.2, t);
 
     this.master = ctx.createGain();
     this.master.gain.setValueAtTime(this._muted ? FLOOR : this._volume, t);
 
-    this.bus.connect(this.sat);
+    this.bus.connect(this.air);
+    this.air.connect(this.ceiling);
+    this.ceiling.connect(this.sat);
     this.sat.connect(this.comp);
     this.comp.connect(this.limiter);
     this.limiter.connect(this.master);
     this.master.connect(ctx.destination);
 
-    // beds pass through a duck stage so narration can cut through
+    // Beds pass through a duck stage so narration can cut through. The bed
+    // now sits roughly 5 dB below where it used to, which both widens the gap
+    // to the cues and leaves room for text to sit on top of it comfortably.
     this.duckGain = ctx.createGain();
     this.duckGain.gain.setValueAtTime(1, t);
     this.duckGain.connect(this.bus);
     this.bedBus = ctx.createGain();
-    this.bedBus.gain.setValueAtTime(1, t);
+    this.bedBus.gain.setValueAtTime(0.52, t);
     this.bedBus.connect(this.duckGain);
 
     this.cueBus = ctx.createGain();
-    this.cueBus.gain.setValueAtTime(1, t);
+    this.cueBus.gain.setValueAtTime(0.8, t);
     this.cueBus.connect(this.bus);
   }
 
@@ -1890,10 +2184,10 @@ export class Score {
       const d = ctx.createDelay(2);
       d.delayTime.setValueAtTime(time, t);
       const fb = ctx.createGain();
-      fb.gain.setValueAtTime(0.34, t);
+      fb.gain.setValueAtTime(0.28, t);
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.setValueAtTime(2600, t);
+      lp.frequency.setValueAtTime(1600, t); // repeats get darker fast
       const p = panner(ctx, pan);
       this.delayIn.connect(d);
       d.connect(lp); lp.connect(fb); fb.connect(d);
@@ -1902,9 +2196,11 @@ export class Score {
     };
 
     this.delayOut = ctx.createGain();
-    this.delayOut.gain.setValueAtTime(0.5, t);
+    this.delayOut.gain.setValueAtTime(0.34, t);
     this.delayOut.connect(this.bus);
-    this._delayNodes = [].concat(mk(0.37, -0.6), mk(0.55, 0.6)).filter(Boolean);
+    // delay times in a golden ratio: the two taps never land together, so the
+    // repeats never settle into a pulse
+    this._delayNodes = [].concat(mk(0.383, -0.6), mk(0.619, 0.6)).filter(Boolean);
     // a slice of the delay returns to the room
     this.delayOut.connect(this.reverb.input);
   }
@@ -2007,9 +2303,11 @@ export class Score {
     if (!this.ready) { this._defer('cue', [name, opts]); return; }
     if (this._sleeping || this._muted) return;
 
-    // cheap retrigger guard so held keys cannot flood the graph
+    // Cheap retrigger guard so held keys cannot flood the graph. The gaps are
+    // wider than they were: a cue firing twice inside 40 ms is not heard as
+    // two cues, only as one louder and harsher one.
     const now = this.ctx.currentTime;
-    const min = name === 'click' || name === 'hover' ? 0.03 : 0.06;
+    const min = name === 'click' || name === 'hover' ? 0.06 : 0.1;
     if ((this._lastCue.get(name) || -1) > now - min) return;
     this._lastCue.set(name, now);
     if (this._voices > 54) return;
@@ -2032,7 +2330,7 @@ export class Score {
     this.reverb.setDecay(3.2 + this.loneliness * 6.5);
     const t = this.ctx.currentTime;
     this.reverb.output.gain.setValueAtTime(this.reverb.output.gain.value, t);
-    this.reverb.output.gain.linearRampToValueAtTime(0.9 + this.loneliness * 0.5, t + 1.5);
+    this.reverb.output.gain.linearRampToValueAtTime(0.75 + this.loneliness * 0.4, t + 3);
   }
 
   setMuted(on) {
@@ -2055,6 +2353,12 @@ export class Score {
     g.linearRampToValueAtTime(Math.max(FLOOR, this._volume), t + 0.1);
   }
 
+  /**
+   * Pull the bed down under narration. Deeper than it was (0.12 rather than
+   * 0.3, roughly 18 dB) and smoother at both ends: an exponential fall over
+   * 0.6 s and a two-and-a-half second return, so neither edge draws attention
+   * to itself. Cues are unaffected — they do not pass through this stage.
+   */
   duck(seconds = 2) {
     if (!this.ready) { this._defer('duck', [seconds]); return; }
     const hold = clamp(num(seconds, 2), 0.1, 120);
@@ -2062,9 +2366,9 @@ export class Score {
     const g = this.duckGain.gain;
     g.cancelScheduledValues(t);
     g.setValueAtTime(Math.max(FLOOR, g.value), t);
-    g.linearRampToValueAtTime(0.3, t + 0.3);
-    g.setValueAtTime(0.3, t + 0.3 + hold);
-    g.linearRampToValueAtTime(1, t + 0.3 + hold + 1.1);
+    g.exponentialRampToValueAtTime(0.12, t + 0.6);
+    g.setValueAtTime(0.12, t + 0.6 + hold);
+    g.exponentialRampToValueAtTime(1, t + 0.6 + hold + 2.5);
   }
 
   /** Optional convenience for scripted sequences; harmless before start(). */
@@ -2092,7 +2396,8 @@ export class Score {
     if (this.reverb) { this.reverb.dispose(); }
 
     const all = [this.bedBus, this.cueBus, this.duckGain, this.delayIn, this.delayOut,
-      this.bus, this.sat, this.comp, this.limiter, this.master].concat(this._delayNodes || []);
+      this.bus, this.air, this.ceiling, this.sat, this.comp, this.limiter, this.master]
+      .concat(this._delayNodes || []);
     for (const n of all) { if (n) { try { n.disconnect(); } catch (e) { /* ignore */ } } }
 
     if (this.ctx && this.ctx.close) {

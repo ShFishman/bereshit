@@ -44,12 +44,14 @@
   <div class="rail" id="rail" hidden></div>
 
   <div class="verse-wrap" id="verse-wrap" hidden>
+    <div class="scrim scrim-c"></div>
     <div class="verse-ref" id="verse-ref"></div>
     <div class="verse-he" id="verse-he"></div>
     <div class="verse-en" id="verse-en"></div>
   </div>
 
   <div class="narr-wrap" id="narr-wrap" hidden>
+    <div class="scrim scrim-b"></div>
     <div class="narr-he" id="narr-he"></div>
     <div class="narr-en" id="narr-en"></div>
   </div>
@@ -68,15 +70,34 @@
   <div class="choices" id="choices" hidden></div>
 
   <div class="speaker" id="speaker" hidden>
+    <div class="scrim scrim-b"></div>
     <div class="speaker-name" id="speaker-name"></div>
     <div class="speaker-he" id="speaker-he"></div>
     <div class="speaker-en" id="speaker-en"></div>
     <div class="speaker-gloss" id="speaker-gloss"></div>
   </div>
 
+  <div class="namebox" id="namebox" hidden>
+    <div class="scrim scrim-b"></div>
+    <div class="name-prompt" id="name-prompt"></div>
+    <form class="name-form" id="name-form" autocomplete="off">
+      <input class="name-input" id="name-input" type="text" maxlength="28" dir="auto"
+             autocomplete="off" autocorrect="off" spellcheck="false">
+      <button class="name-go" id="name-go" type="submit" aria-label="name it">←</button>
+    </form>
+    <button class="name-skip" id="name-skip" type="button"></button>
+  </div>
+
   <div class="prompt" id="prompt" hidden>
     <div class="prompt-ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/><circle cx="50" cy="50" r="46" class="fill"/></svg></div>
     <div class="prompt-text" id="prompt-text"></div>
+  </div>
+
+  <div class="given-name" id="given-name" hidden>
+    <div class="scrim scrim-c"></div>
+    <div class="given-label" id="given-label"></div>
+    <div class="given-word" id="given-word"></div>
+    <div class="given-trad" id="given-trad"></div>
   </div>
 
   <div class="lonely-meter" id="lonely-meter" hidden>

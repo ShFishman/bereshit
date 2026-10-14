@@ -6,6 +6,7 @@ import { clock, wait, ease, lerp, clamp, isMobile } from '../core/utils.js';
 import { POSES } from '../gfx/figures.js';
 import { PLACES } from '../core/stage.js';
 import { faceTowards } from './act2_eden.js';
+import { runExchange } from './dialogue.js';
 
 const ADAM = new THREE.Vector3(1.2, 0, 11.5);
 const EVE = new THREE.Vector3(-1.5, 0, 10.2);
@@ -156,26 +157,46 @@ export async function runExile(ctx) {
 
   await ui.narrateAll(F.hiding.narration);
 
-  /* ═══════════ אַיֶּכָּה ═══════════ */
-  await wait(1.6);
+  /* ═══════════ אַיֶּכָּה, and the blaming ═══════════ */
+  // The player answers for Adam. Deflecting is the easier, more natural reply —
+  // which is the whole point of letting them choose it.
+  await wait(1.4);
   score.cue('ayeka');
   clock.to(3, e => { stage.glory.intensity = .55 + Math.sin(e * Math.PI) * .5; });
   engine.rig.shake(.1, 1.4);
+  engine.rig.moveTo([-9.5, 2.2, 22], [-14.4, 1.0, 17], 8, ease.inOutCubic);
 
-  await ui.speak(NAME_VOICE, F.ayeka.call, null, { dwell: 6200, fadeOut: true });
-  await wait(1.2);
-  await ui.speak(NAME_ADAM, F.ayeka.answer, null, { dwell: 5600, fadeOut: true });
-  await ui.narrateAll(F.ayeka.narration);
-
-  /* ═══════════ the blaming ═══════════ */
-  engine.rig.moveTo([-9.5, 2.2, 22], [-14.4, 1.0, 17], 9, ease.inOutCubic);
-
-  for (const ex of (F.blame.exchanges || [])) {
-    if (ex.speaker === 'god') {
-      clock.to(2, e => { stage.glory.intensity = .55 + Math.sin(e * Math.PI) * .35; });
+  if (SCRIPT.exchanges?.blame) {
+    state.distance = await runExchange(ctx, SCRIPT.exchanges.blame, {
+      speaker: NAME_VOICE, player: NAME_ADAM,
+      dwellVoice: 5600, dwellReply: 4600, dwellRetort: 5000,
+      onNode: (_n, i, t) => {
+        clock.to(2.2, e => { stage.glory.intensity = .55 + Math.sin(e * Math.PI) * .38; });
+        engine.rig.moveTo(
+          [lerp(-9.5, -11.2, t), 2.1, lerp(22, 20.4, t)],
+          [HIDE_A.x, 1.15, HIDE_A.z], 7, ease.inOutCubic);
+      },
+      onReply: (r) => {
+        // the further he gets from "I", the further the camera gets from him
+        const d = r?.sway ?? 0;
+        if (d >= 2) {
+          stage.adam.poseTo(POSES.pointAway, 1.6, ease.outCubic);
+          stage.eve.poseTo(POSES.judged, 1.8);
+          score.cue('tear');
+        } else {
+          stage.adam.poseTo(POSES.judged, 1.6, ease.outCubic);
+        }
+      },
+    });
+  } else {
+    await ui.speak(NAME_VOICE, F.ayeka.call, null, { dwell: 6200, fadeOut: true });
+    await wait(1.2);
+    await ui.speak(NAME_ADAM, F.ayeka.answer, null, { dwell: 5600, fadeOut: true });
+    await ui.narrateAll(F.ayeka.narration);
+    for (const ex of (F.blame.exchanges || [])) {
+      await ui.speak(SPEAKER_NAMES[ex.speaker] || '', ex, null, { dwell: 5200 });
+      await wait(.6);
     }
-    await ui.speak(SPEAKER_NAMES[ex.speaker] || '', ex, null, { dwell: 5200, fadeOut: false });
-    await wait(.6);
   }
   await ui.hideSpeak();
 

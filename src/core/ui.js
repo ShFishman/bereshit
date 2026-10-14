@@ -40,6 +40,10 @@ class UI {
       speaker: $('speaker'), speakerName: $('speaker-name'), speakerHe: $('speaker-he'), speakerEn: $('speaker-en'), speakerGloss: $('speaker-gloss'),
       prompt: $('prompt'), promptText: $('prompt-text'), promptFill: document.querySelector('#prompt .fill'),
       lonely: $('lonely-meter'), lonelyFill: $('lonely-fill'),
+      namebox: $('namebox'), namePrompt: $('name-prompt'), nameForm: $('name-form'),
+      nameInput: $('name-input'), nameGo: $('name-go'), nameSkip: $('name-skip'),
+      given: $('given-name'), givenLabel: $('given-label'),
+      givenWord: $('given-word'), givenTrad: $('given-trad'),
     };
     this.score = null;
     this.showEn = true;
@@ -343,6 +347,88 @@ class UI {
     return d.promise;
   }
 
+  /* ── naming: the player supplies the word ── */
+
+  /**
+   * Ask the player what to call something. Resolves with their text, or null
+   * if they let it keep the name the text gives it.
+   */
+  async askName({ prompt, placeholder, skip } = {}) {
+    const e = this.el;
+    e.namePrompt.textContent = prompt || '';
+    e.nameInput.value = '';
+    e.nameInput.placeholder = placeholder || '';
+    e.nameSkip.textContent = skip || '';
+    e.nameGo.disabled = true;
+    e.namebox.hidden = false;
+    requestAnimationFrame(() => {
+      e.namebox.classList.add('in');
+      try { e.nameInput.focus({ preventScroll: true }); } catch { e.nameInput.focus(); }
+    });
+
+    const d = deferred();
+    let done = false;
+
+    const finish = (value) => {
+      if (done) return; done = true;
+      untrack();
+      cleanup();
+      e.namebox.classList.remove('in');
+      wait(.6).then(() => { e.namebox.hidden = true; });
+      d.resolve(value);
+    };
+
+    const onInput = () => { e.nameGo.disabled = !e.nameInput.value.trim(); };
+    const onSubmit = (ev) => {
+      ev.preventDefault();
+      const v = e.nameInput.value.trim();
+      if (!v) return;
+      this.cue('name');
+      finish(v);
+    };
+    const onSkip = () => { this.cue('click'); finish(null); };
+    // keep typing away from the global advance-on-space/click handlers
+    const swallow = (ev) => ev.stopPropagation();
+
+    const cleanup = () => {
+      e.nameForm.removeEventListener('submit', onSubmit);
+      e.nameInput.removeEventListener('input', onInput);
+      e.nameSkip.removeEventListener('click', onSkip);
+      e.nameInput.removeEventListener('keydown', swallow);
+      e.namebox.removeEventListener('pointerdown', swallow);
+    };
+
+    e.nameForm.addEventListener('submit', onSubmit);
+    e.nameInput.addEventListener('input', onInput);
+    e.nameSkip.addEventListener('click', onSkip);
+    e.nameInput.addEventListener('keydown', swallow);
+    e.namebox.addEventListener('pointerdown', swallow);
+
+    const untrack = this._track(() => finish(null));
+    return d.promise;
+  }
+
+  /** Show the name the player just gave, large, with the traditional one beneath. */
+  async showGiven(word, traditional, { givenLabel = '', tradLabel = '', dwell = 3600 } = {}) {
+    const e = this.el;
+    e.given.hidden = false;
+    e.givenLabel.textContent = givenLabel;
+    e.givenWord.textContent = word || '';
+    e.givenWord.setAttribute('dir', 'auto');
+    e.givenTrad.innerHTML = '';
+    if (traditional) {
+      const lab = document.createElement('span');
+      lab.textContent = tradLabel;
+      e.givenTrad.append(lab, document.createTextNode(traditional));
+    }
+    requestAnimationFrame(() => e.given.classList.add('in'));
+    this.duck(2.5);
+    await this.waitOrClick(dwell / 1000);
+    e.given.classList.remove('in');
+    await wait(.9);
+    e.given.hidden = true;
+  }
+
   /* ── loneliness meter ── */
 
   showLonely() { this.el.lonely.hidden = false; requestAnimationFrame(() => this.el.lonely.classList.add('in')); }
@@ -376,10 +462,13 @@ class UI {
     e.dayStamp.classList.remove('in');
     e.lonely.classList.remove('in');
     e.prompt.classList.remove('in');
+    e.namebox.classList.remove('in');
+    e.given.classList.remove('in');
     this.hideChoices();
     await wait(.9);
     e.verseWrap.hidden = true; e.narrWrap.hidden = true; e.titleWrap.hidden = true;
     e.speaker.hidden = true; e.dayStamp.hidden = true; e.lonely.hidden = true; e.prompt.hidden = true;
+    e.namebox.hidden = true; e.given.hidden = true;
   }
 
   cinema(on) { document.body.classList.toggle('cinema', !!on); }
