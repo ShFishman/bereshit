@@ -4,7 +4,7 @@ A 3D browser retelling of **פרשת בראשית** (Genesis 1–3): the seven d
 
 You do not watch the world being made. You hold a button down and it happens.
 
-**[▶ Play it](#)** · Hebrew with optional English · headphones recommended
+**[▶ Play it](https://shfishman.github.io/bereshit/)** · Hebrew with optional English · headphones recommended
 
 ---
 
