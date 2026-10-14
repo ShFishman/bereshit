@@ -1,0 +1,13 @@
+{
+  "name": "bereshit",
+  "version": "1.0.0",
+  "description": "A 3D retelling of Parashat Bereshit — the seven days, the loneliness of Adam, the serpent, and the gate that closed.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node tools/serve.js",
+    "check": "node tools/check.js"
+  },
+  "keywords": ["three.js", "webgl", "bereshit", "genesis", "hebrew", "narrative-game"],
+  "license": "MIT"
+}

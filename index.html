@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>בְּרֵאשִׁית — In the Beginning</title>
+<meta name="description" content="A 3D retelling of Parashat Bereshit: the seven days, the loneliness of Adam, the serpent, and the gate that closed.">
+<meta name="theme-color" content="#05060a">
+
+<meta property="og:title" content="בְּרֵאשִׁית — In the Beginning">
+<meta property="og:description" content="Speak the world into being. Then watch what it costs.">
+<meta property="og:type" content="website">
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%2305060a'/%3E%3Ctext x='32' y='46' font-size='44' text-anchor='middle' fill='%23e8c87a' font-family='serif'%3E%D7%91%3C/text%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@300;400;500;700;900&family=Heebo:wght@200;300;400;500;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="stage"></canvas>
+
+<!-- ───────────── loading ───────────── -->
+<div id="boot" class="boot">
+  <div class="boot-mark">ב</div>
+  <div class="boot-bar"><i></i></div>
+  <div class="boot-note" id="boot-note">טוען את התוהו…</div>
+</div>
+
+<!-- ───────────── narrative overlay ───────────── -->
+<div id="overlay" class="overlay" aria-live="polite">
+
+  <div class="rail" id="rail" hidden></div>
+
+  <div class="verse-wrap" id="verse-wrap" hidden>
+    <div class="verse-ref" id="verse-ref"></div>
+    <div class="verse-he" id="verse-he"></div>
+    <div class="verse-en" id="verse-en"></div>
+  </div>
+
+  <div class="narr-wrap" id="narr-wrap" hidden>
+    <div class="narr-he" id="narr-he"></div>
+    <div class="narr-en" id="narr-en"></div>
+  </div>
+
+  <div class="title-wrap" id="title-wrap" hidden>
+    <h1 class="title-he" id="title-he"></h1>
+    <div class="title-en" id="title-en"></div>
+    <div class="title-sub" id="title-sub"></div>
+  </div>
+
+  <div class="day-stamp" id="day-stamp" hidden>
+    <div class="day-he"></div>
+    <div class="day-ep"></div>
+  </div>
+
+  <div class="choices" id="choices" hidden></div>
+
+  <div class="speaker" id="speaker" hidden>
+    <div class="speaker-name" id="speaker-name"></div>
+    <div class="speaker-he" id="speaker-he"></div>
+    <div class="speaker-en" id="speaker-en"></div>
+    <div class="speaker-gloss" id="speaker-gloss"></div>
+  </div>
+
+  <div class="prompt" id="prompt" hidden>
+    <div class="prompt-ring"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/><circle cx="50" cy="50" r="46" class="fill"/></svg></div>
+    <div class="prompt-text" id="prompt-text"></div>
+  </div>
+
+  <div class="lonely-meter" id="lonely-meter" hidden>
+    <div class="lonely-label">לְבַדּוֹ</div>
+    <div class="lonely-track"><i id="lonely-fill"></i></div>
+  </div>
+</div>
+
+<!-- ───────────── chrome ───────────── -->
+<div id="chrome" class="chrome" hidden>
+  <button id="btn-sound"  class="cbtn" title="צליל" aria-label="sound">♪</button>
+  <button id="btn-lang"   class="cbtn" title="תרגום" aria-label="translation">A</button>
+  <button id="btn-chapters" class="cbtn" title="פרקים" aria-label="chapters">☰</button>
+  <button id="btn-full"   class="cbtn" title="מסך מלא" aria-label="fullscreen">⤢</button>
+</div>
+
+<div id="chapters" class="chapters" hidden>
+  <div class="chapters-inner">
+    <h2>פרקים</h2>
+    <ul id="chapters-list"></ul>
+    <button class="ghost" id="chapters-close">סגור</button>
+  </div>
+</div>
+
+<div id="gate" class="gate">
+  <div class="gate-inner">
+    <div class="gate-he">בְּרֵאשִׁית</div>
+    <div class="gate-en">In the Beginning</div>
+    <p class="gate-blurb">
+      שִׁבְעָה יָמִים. גַּן אֶחָד. שְׁנֵי בְּנֵי אָדָם, וְנָחָשׁ שֶׁאֵינוֹ מְשַׁקֵּר.<br>
+      <span>Seven days. One garden. Two people, and a serpent that never lies.</span>
+    </p>
+    <button id="gate-begin" class="begin">הִתְחֵל</button>
+    <div class="gate-fine">אוזניות מומלצות · Headphones recommended</div>
+  </div>
+</div>
+
+<noscript><div class="noscript">המשחק דורש JavaScript. / This experience requires JavaScript.</div></noscript>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
